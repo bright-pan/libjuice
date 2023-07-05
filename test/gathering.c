@@ -6,7 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#include "juice/juice.h"
+#include "test_config.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,9 +20,8 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 #include <unistd.h> // for sleep
 #endif
 
-#define BUFFER_SIZE 4096
 
-static juice_agent_t *agent;
+static juice_agent_t *agent = NULL;
 static bool success = false;
 static bool done = false;
 
@@ -31,15 +30,29 @@ static void on_candidate(juice_agent_t *agent, const char *sdp, void *user_ptr);
 static void on_gathering_done(juice_agent_t *agent, void *user_ptr);
 
 int test_gathering() {
-	juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
+
+	// Turn server config
+	juice_turn_server_t turn_server;
+	memset(&turn_server, 0, sizeof(turn_server));
+	turn_server.host = TURN_SERVER_HOST;
+	turn_server.port = TURN_SERVER_PORT;
+	turn_server.username = TURN_SERVER_USERNAME;
+	turn_server.password = TURN_SERVER_PASSWORD;
 
 	// Create agent
 	juice_config_t config;
 	memset(&config, 0, sizeof(config));
 
+	config.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
 	// STUN server example
-	config.stun_server_host = "stun.l.google.com";
-	config.stun_server_port = 19302;
+	// config.stun_server_host = "test.funlink.cloud";
+	// config.stun_server_port = 3478;
+
+	config.bind_address = "192.168.4.2";
+
+	// TURN server example (use your own server in production)
+	config.turn_servers = &turn_server;
+	config.turn_servers_count = 1;
 
 	config.cb_state_changed = on_state_changed;
 	config.cb_candidate = on_candidate;
@@ -71,6 +84,11 @@ int test_gathering() {
 		printf("Failure\n");
 		return -1;
 	}
+
+	// Reset
+	agent = NULL;
+	success = false;
+	done = false;
 }
 
 // On state changed

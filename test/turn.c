@@ -6,7 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#include "juice/juice.h"
+#include "test_config.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,7 +20,6 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 #include <unistd.h> // for sleep
 #endif
 
-#define BUFFER_SIZE 4096
 
 static juice_agent_t *agent1;
 static juice_agent_t *agent2;
@@ -38,26 +37,35 @@ static void on_recv1(juice_agent_t *agent, const char *data, size_t size, void *
 static void on_recv2(juice_agent_t *agent, const char *data, size_t size, void *user_ptr);
 
 int test_turn() {
-	juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
+	// juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
+
+	// Turn server config
+	juice_turn_server_t turn_server;
+	memset(&turn_server, 0, sizeof(turn_server));
+	turn_server.host = TURN_SERVER_HOST;
+	turn_server.port = TURN_SERVER_PORT;
+	turn_server.username = TURN_SERVER_USERNAME;
+	turn_server.password = TURN_SERVER_PASSWORD;
 
 	// Agent 1: Create agent
 	juice_config_t config1;
 	memset(&config1, 0, sizeof(config1));
 
-	// STUN server example (use your own server in production)
-	config1.stun_server_host = "openrelay.metered.ca";
-	config1.stun_server_port = 80;
+	// Concurrency
+	config1.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
 
-	// TURN server example (use your own server in production)
-	juice_turn_server_t turn_server;
-	memset(&turn_server, 0, sizeof(turn_server));
-	turn_server.host = "openrelay.metered.ca";
-	turn_server.port = 80;
-	turn_server.username = "openrelayproject";
-	turn_server.password = "openrelayproject";
+	// STUN server example (use your own server in production)
+	config1.stun_server_host = STUN_SERVER_HOST;
+	config1.stun_server_port = STUN_SERVER_PORT;
+
+	// TURN server
 	config1.turn_servers = &turn_server;
 	config1.turn_servers_count = 1;
 
+	// Bind address
+	config1.bind_address = BIND_ADDRESS;
+
+	// Callback
 	config1.cb_state_changed = on_state_changed1;
 	config1.cb_candidate = on_candidate1;
 	config1.cb_gathering_done = on_gathering_done1;
@@ -70,10 +78,25 @@ int test_turn() {
 	juice_config_t config2;
 	memset(&config2, 0, sizeof(config2));
 
-	// STUN server example (use your own server in production)
-	config2.stun_server_host = "openrelay.metered.ca";
-	config2.stun_server_port = 80;
+	// Concurrency
+	config2.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
 
+	// STUN server example (use your own server in production)
+	// config2.stun_server_host = "stun.relay.metered.ca";
+	// config2.stun_server_port = 80;
+
+	// TURN server example (use your own server in production)
+	config2.turn_servers = &turn_server;
+	config2.turn_servers_count = 1;
+
+	// Bind address
+	config2.bind_address = BIND_ADDRESS;
+
+	// Port range example
+	config2.local_port_range_begin = 60000;
+	config2.local_port_range_end = 61000;
+
+	// Callback
 	config2.cb_state_changed = on_state_changed2;
 	config2.cb_candidate = on_candidate2;
 	config2.cb_gathering_done = on_gathering_done2;
@@ -100,19 +123,38 @@ int test_turn() {
 
 	// Agent 1: Gather candidates (and send them to agent 2)
 	juice_gather_candidates(agent1);
-	sleep(2);
+	sleep(5);
 
 	// Agent 2: Gather candidates (and send them to agent 1)
 	juice_gather_candidates(agent2);
-	sleep(2);
+	sleep(5);
 
 	// -- Connection should be finished --
 
 	// Check states
 	juice_state_t state1 = juice_get_state(agent1);
+	printf("state1 = %s\n", juice_state_to_string(state1));
+
 	juice_state_t state2 = juice_get_state(agent2);
+	printf("state2 = %s\n", juice_state_to_string(state2));
+
 	bool success = ((state1 == JUICE_STATE_COMPLETED || state1 == JUICE_STATE_CONNECTED) &&
 	                (state2 == JUICE_STATE_CONNECTED || state2 == JUICE_STATE_COMPLETED));
+
+	printf("success=%d\n", success ? 1 : 0);
+
+	if (!success)
+		goto __exit;
+
+	// Agent 1: send a message
+	const char *message1 = "Hello from 1";
+	juice_send(agent1, message1, strlen(message1));
+
+	// Agent 2: send a message
+	const char *message2 = "Hello from 2";
+	juice_send(agent2, message2, strlen(message2));
+
+	sleep(5);
 
 	// Retrieve candidates
 	char local[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
@@ -147,6 +189,8 @@ int test_turn() {
 		printf("Local address  2: %s\n", localAddr);
 		printf("Remote address 2: %s\n", remoteAddr);
 	}
+
+__exit:
 
 	// Agent 1: destroy
 	juice_destroy(agent1);
@@ -187,7 +231,7 @@ static void on_state_changed2(juice_agent_t *agent, juice_state_t state, void *u
 // Agent 1: on local candidate gathered
 static void on_candidate1(juice_agent_t *agent, const char *sdp, void *user_ptr) {
 	// Filter relayed candidates
-	if (!strstr(sdp, "relay"))
+	if (strstr(sdp, "host"))
 		return;
 
 	printf("Candidate 1: %s\n", sdp);
@@ -199,7 +243,7 @@ static void on_candidate1(juice_agent_t *agent, const char *sdp, void *user_ptr)
 // Agent 2: on local candidate gathered
 static void on_candidate2(juice_agent_t *agent, const char *sdp, void *user_ptr) {
 	// Filter server reflexive candidates
-	if (!strstr(sdp, "srflx"))
+	if (strstr(sdp, "host"))
 		return;
 
 	printf("Candidate 2: %s\n", sdp);

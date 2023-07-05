@@ -7,6 +7,7 @@
  */
 
 #include "addr.h"
+#include "getnameinfo.h"
 #include "log.h"
 
 #include <stdio.h>
@@ -16,8 +17,10 @@ socklen_t addr_get_len(const struct sockaddr *sa) {
 	switch (sa->sa_family) {
 	case AF_INET:
 		return sizeof(struct sockaddr_in);
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6:
 		return sizeof(struct sockaddr_in6);
+#endif
 	default:
 		JLOG_WARN("Unknown address family %hu", sa->sa_family);
 		return 0;
@@ -28,8 +31,10 @@ uint16_t addr_get_port(const struct sockaddr *sa) {
 	switch (sa->sa_family) {
 	case AF_INET:
 		return ntohs(((struct sockaddr_in *)sa)->sin_port);
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6:
 		return ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
+#endif
 	default:
 		JLOG_WARN("Unknown address family %hu", sa->sa_family);
 		return 0;
@@ -41,9 +46,11 @@ int addr_set_port(struct sockaddr *sa, uint16_t port) {
 	case AF_INET:
 		((struct sockaddr_in *)sa)->sin_port = htons(port);
 		return 0;
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6:
 		((struct sockaddr_in6 *)sa)->sin6_port = htons(port);
 		return 0;
+#endif
 	default:
 		JLOG_WARN("Unknown address family %hu", sa->sa_family);
 		return -1;
@@ -61,6 +68,7 @@ bool addr_is_any(const struct sockaddr *sa) {
 
 		return true;
 	}
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6: {
 		const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
 		if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr)) {
@@ -76,6 +84,7 @@ bool addr_is_any(const struct sockaddr *sa) {
 		}
 		return true;
 	}
+#endif
 	default:
 		return false;
 	}
@@ -92,6 +101,7 @@ bool addr_is_local(const struct sockaddr *sa) {
 			return true;
 		return false;
 	}
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6: {
 		const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
 		if (IN6_IS_ADDR_LOOPBACK(&sin6->sin6_addr)) {
@@ -110,6 +120,7 @@ bool addr_is_local(const struct sockaddr *sa) {
 		}
 		return false;
 	}
+#endif
 	default:
 		return false;
 	}
@@ -119,6 +130,7 @@ bool addr_unmap_inet6_v4mapped(struct sockaddr *sa, socklen_t *len) {
 	if (sa->sa_family != AF_INET6)
 		return false;
 
+#if defined (CONFIG_LWIP_USE_IP6)
 	const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
 	if (!IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr))
 		return false;
@@ -132,6 +144,7 @@ bool addr_unmap_inet6_v4mapped(struct sockaddr *sa, socklen_t *len) {
 	sin->sin_port = sin6->sin6_port;
 	memcpy(&sin->sin_addr, ((const uint8_t *)&sin6->sin6_addr) + 12, 4);
 	*len = sizeof(*sin);
+#endif
 	return true;
 }
 
@@ -139,6 +152,7 @@ bool addr_map_inet6_v4mapped(struct sockaddr_storage *ss, socklen_t *len) {
 	if (ss->ss_family != AF_INET)
 		return false;
 
+#if defined (CONFIG_LWIP_USE_IP6)
 	const struct sockaddr_in *sin = (const struct sockaddr_in *)ss;
 	struct sockaddr_in copy = *sin;
 	sin = &copy;
@@ -152,6 +166,7 @@ bool addr_map_inet6_v4mapped(struct sockaddr_storage *ss, socklen_t *len) {
 	memset(b + 10, 0xFF, 2);
 	memcpy(b + 12, (const uint8_t *)&sin->sin_addr, 4);
 	*len = sizeof(*sin6);
+#endif
 	return true;
 }
 
@@ -169,6 +184,7 @@ bool addr_is_equal(const struct sockaddr *a, const struct sockaddr *b, bool comp
 			return false;
 		break;
 	}
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6: {
 		const struct sockaddr_in6 *ain6 = (const struct sockaddr_in6 *)a;
 		const struct sockaddr_in6 *bin6 = (const struct sockaddr_in6 *)b;
@@ -178,6 +194,7 @@ bool addr_is_equal(const struct sockaddr *a, const struct sockaddr *b, bool comp
 			return false;
 		break;
 	}
+#endif
 	default:
 		return false;
 	}
@@ -193,7 +210,7 @@ int addr_to_string(const struct sockaddr *sa, char *buffer, size_t size) {
 	char host[ADDR_MAX_NUMERICHOST_LEN];
 	char service[ADDR_MAX_NUMERICSERV_LEN];
 	if (getnameinfo(sa, salen, host, ADDR_MAX_NUMERICHOST_LEN, service, ADDR_MAX_NUMERICSERV_LEN,
-	                NI_NUMERICHOST | NI_NUMERICSERV | NI_DGRAM)) {
+	                NI_NUMERICHOST | NI_NUMERICSERV)) {
 		JLOG_ERROR("getnameinfo failed, errno=%d", sockerrno);
 		goto error;
 	}
@@ -232,6 +249,7 @@ unsigned long addr_hash(const struct sockaddr *sa, bool with_port) {
 		}
 		break;
 	}
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6: {
 		const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
 		const uint8_t *b = (const uint8_t *)&sin6->sin6_addr;
@@ -243,6 +261,7 @@ unsigned long addr_hash(const struct sockaddr *sa, bool with_port) {
 		}
 		break;
 	}
+#endif
 	default:
 		break;
 	}
@@ -308,3 +327,24 @@ int addr_record_to_string(const addr_record_t *record, char *buffer, size_t size
 unsigned long addr_record_hash(const addr_record_t *record, bool with_port) {
 	return addr_hash((const struct sockaddr *)&record->addr, with_port);
 }
+
+void print_addr_record_string(const char *file, int line, const addr_record_t *record) {
+	char buf[64];
+	addr_record_to_string(record, buf, sizeof(buf));
+	juice_log_write(JUICE_LOG_LEVEL_INFO, file, line, buf);
+}
+
+
+#if defined (AOS_COMP_CLI)
+#include <aos/cli.h>
+
+static void test_addr_is_numeric_hostname(int argc, char **argv) {
+    if (addr_is_numeric_hostname(argv[1])) {
+		JLOG_INFO("hostname[%s] is numeric", argv[1]);
+	} else {
+		JLOG_INFO("hostname[%s] is not numeric", argv[1]);
+	}
+}
+
+ALIOS_CLI_CMD_REGISTER(test_addr_is_numeric_hostname, test_addr_is_numeric_hostname, test_addr_is_numeric_hostname);
+#endif

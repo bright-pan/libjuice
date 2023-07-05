@@ -6,6 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "test_config.h"
 #include "stun.h"
 
 #include <stdint.h>

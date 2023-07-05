@@ -8,7 +8,7 @@
 
 #ifndef NO_SERVER
 
-#include "juice/juice.h"
+#include "test_config.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -21,8 +21,6 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 #else
 #include <unistd.h> // for sleep
 #endif
-
-#define BUFFER_SIZE 4096
 
 #define TURN_USERNAME1 "server_test1"
 #define TURN_PASSWORD1 "79874638521694"
@@ -49,8 +47,9 @@ static void on_gathering_done2(juice_agent_t *agent, void *user_ptr);
 static void on_recv1(juice_agent_t *agent, const char *data, size_t size, void *user_ptr);
 static void on_recv2(juice_agent_t *agent, const char *data, size_t size, void *user_ptr);
 
+
 int test_server() {
-	juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
+	//juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
 
 	// Create server
 	juice_server_credentials_t credentials[1];
@@ -60,7 +59,8 @@ int test_server() {
 
 	juice_server_config_t server_config;
 	memset(&server_config, 0, sizeof(server_config));
-	server_config.port = 3478;
+	server_config.bind_address = SERVER_BIND_ADDRESS;
+	server_config.port = SERVER_BIND_PORT;
 	server_config.credentials = credentials;
 	server_config.credentials_count = 1;
 	server_config.max_allocations = 100;
@@ -83,16 +83,18 @@ int test_server() {
 	// Agent 1: Create agent
 	juice_config_t config1;
 	memset(&config1, 0, sizeof(config1));
+	config1.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
+	config1.bind_address = BIND_ADDRESS;
 
 	// Set STUN server
-	config1.stun_server_host = "localhost";
-	config1.stun_server_port = 3478;
+	config1.stun_server_host = SERVER_BIND_ADDRESS;
+	config1.stun_server_port = SERVER_BIND_PORT;
 
 	// Set TURN server
 	juice_turn_server_t turn_server1;
 	memset(&turn_server1, 0, sizeof(turn_server1));
-	turn_server1.host = "localhost";
-	turn_server1.port = 3478;
+	turn_server1.host = SERVER_BIND_ADDRESS;
+	turn_server1.port = SERVER_BIND_PORT;
 	turn_server1.username = TURN_USERNAME1;
 	turn_server1.password = TURN_PASSWORD1;
 	config1.turn_servers = &turn_server1;
@@ -109,16 +111,18 @@ int test_server() {
 	// Agent 2: Create agent
 	juice_config_t config2;
 	memset(&config2, 0, sizeof(config2));
+	config2.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
+	config2.bind_address = BIND_ADDRESS;
 
 	// Set STUN server
-	config2.stun_server_host = "localhost";
-	config2.stun_server_port = 3478;
+	config2.stun_server_host = SERVER_BIND_ADDRESS;
+	config2.stun_server_port = SERVER_BIND_PORT;
 
 	// Set TURN server
 	juice_turn_server_t turn_server2;
 	memset(&turn_server2, 0, sizeof(turn_server2));
-	turn_server2.host = "localhost";
-	turn_server2.port = 3478;
+	turn_server2.host = SERVER_BIND_ADDRESS;
+	turn_server2.port = SERVER_BIND_PORT;
 	turn_server2.username = TURN_USERNAME2;
 	turn_server2.password = TURN_PASSWORD2;
 	config2.turn_servers = &turn_server2;

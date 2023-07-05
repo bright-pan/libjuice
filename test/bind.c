@@ -6,7 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#include "juice/juice.h"
+#include "test_config.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,8 +20,6 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 #include <unistd.h> // for sleep
 #endif
 
-#define BUFFER_SIZE 4096
-#define BIND_ADDRESS "127.0.0.1"
 
 static juice_agent_t *agent1;
 static juice_agent_t *agent2;
@@ -39,12 +37,12 @@ static void on_recv1(juice_agent_t *agent, const char *data, size_t size, void *
 static void on_recv2(juice_agent_t *agent, const char *data, size_t size, void *user_ptr);
 
 int test_bind() {
-	juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
+	//juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
 
 	// Agent 1: Create agent
 	juice_config_t config1;
 	memset(&config1, 0, sizeof(config1));
-
+	config1.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
 	config1.bind_address = BIND_ADDRESS;
 
 	config1.cb_state_changed = on_state_changed1;
@@ -58,7 +56,7 @@ int test_bind() {
 	// Agent 2: Create agent
 	juice_config_t config2;
 	memset(&config2, 0, sizeof(config2));
-
+	config2.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
 	config2.bind_address = BIND_ADDRESS;
 
 	config2.cb_state_changed = on_state_changed2;

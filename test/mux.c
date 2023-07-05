@@ -6,7 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#include "juice/juice.h"
+#include "test_config.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,7 +20,6 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 #include <unistd.h> // for sleep
 #endif
 
-#define BUFFER_SIZE 4096
 
 static juice_agent_t *agent1;
 static juice_agent_t *agent2;
@@ -44,13 +43,15 @@ bool endswith(const char *str, const char *suffix) {
 }
 
 int test_mux() {
-	juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
+	// juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
 
 	// Agent 1: Create agent
 	juice_config_t config1;
 	memset(&config1, 0, sizeof(config1));
-	config1.stun_server_host = "stun.l.google.com";
-	config1.stun_server_port = 19302;
+	config1.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
+	config1.bind_address = BIND_ADDRESS;
+	config1.stun_server_host = STUN_SERVER_HOST;
+	config1.stun_server_port = STUN_SERVER_PORT;
 	config1.cb_state_changed = on_state_changed1;
 	config1.cb_candidate = on_candidate1;
 	config1.cb_gathering_done = on_gathering_done1;
@@ -62,6 +63,7 @@ int test_mux() {
 	juice_config_t config2;
 	memset(&config2, 0, sizeof(config2));
 	config2.concurrency_mode = JUICE_CONCURRENCY_MODE_MUX;
+	config2.bind_address = BIND_ADDRESS;
 	config2.local_port_range_begin = 60000;
 	config2.local_port_range_end = 60000;
 	config2.cb_state_changed = on_state_changed2;

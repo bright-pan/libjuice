@@ -445,6 +445,7 @@ int stun_write_value_mapped_address(void *buf, size_t size, const struct sockadd
 			value->address[i] = bytes[i] ^ mask[i];
 		return sizeof(struct stun_value_mapped_address) + 4;
 	}
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6: {
 		value->family = STUN_ADDRESS_FAMILY_IPV6;
 		if (size < sizeof(struct stun_value_mapped_address) + 16)
@@ -459,6 +460,7 @@ int stun_write_value_mapped_address(void *buf, size_t size, const struct sockadd
 			value->address[i] = bytes[i] ^ mask[i];
 		return sizeof(struct stun_value_mapped_address) + 16;
 	}
+#endif
 	default: {
 		JLOG_DEBUG("Unknown address family %u", (unsigned int)addr->sa_family);
 		return -1;
@@ -1043,6 +1045,7 @@ int stun_read_value_mapped_address(const void *data, size_t size, addr_record_t 
 			bytes[i] = value->address[i] ^ mask[i];
 		break;
 	}
+#if defined (CONFIG_LWIP_USE_IP6)
 	case STUN_ADDRESS_FAMILY_IPV6: {
 		len += 16;
 		if (size < len) {
@@ -1059,6 +1062,7 @@ int stun_read_value_mapped_address(const void *data, size_t size, addr_record_t 
 			bytes[i] = value->address[i] ^ mask[i];
 		break;
 	}
+#endif
 	default: {
 		JLOG_DEBUG("Unknown STUN address family 0x%X", (unsigned int)family);
 		len = size;

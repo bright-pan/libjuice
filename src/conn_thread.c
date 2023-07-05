@@ -58,54 +58,55 @@ int conn_thread_prepare(juice_agent_t *agent, struct pollfd *pfd, timestamp_t *n
 }
 
 int conn_thread_process(juice_agent_t *agent, struct pollfd *pfd) {
+	int ret;
 	conn_impl_t *conn_impl = agent->conn_impl;
 	mutex_lock(&conn_impl->mutex);
 	if (conn_impl->stopped) {
-		mutex_unlock(&conn_impl->mutex);
-		return -1;
+		ret = -1;
+		goto __exit;
 	}
 
 	if (pfd->revents & POLLNVAL || pfd->revents & POLLERR) {
 		JLOG_ERROR("Error when polling socket");
 		agent_conn_fail(agent);
-		mutex_unlock(&conn_impl->mutex);
-		return -1;
+		ret = -1;
+		goto __exit;
 	}
 
 	if (pfd->revents & POLLIN) {
 		char buffer[BUFFER_SIZE];
 		addr_record_t src;
-		int ret;
-		while ((ret = conn_thread_recv(conn_impl->sock, buffer, BUFFER_SIZE, &src)) > 0) {
-			if (agent_conn_recv(agent, buffer, (size_t)ret, &src) != 0) {
+		int len;
+		while ((len = conn_thread_recv(conn_impl->sock, buffer, BUFFER_SIZE, &src)) > 0) {
+			if (agent_conn_recv(agent, buffer, (size_t)len, &src) != 0) {
 				JLOG_WARN("Agent receive failed");
-				mutex_unlock(&conn_impl->mutex);
-				return -1;
+				ret = -1;
+				goto __exit;
 			}
 		}
-
-		if (ret < 0) {
+		if (len < 0) {
 			agent_conn_fail(agent);
-			mutex_unlock(&conn_impl->mutex);
-			return -1;
+			ret = -1;
+			goto __exit;
 		}
 
 		if (agent_conn_update(agent, &conn_impl->next_timestamp) != 0) {
 			JLOG_WARN("Agent update failed");
-			mutex_unlock(&conn_impl->mutex);
-			return -1;
+			ret = -1;
+			goto __exit;
 		}
 
 	} else if (conn_impl->next_timestamp <= current_timestamp()) {
 		if (agent_conn_update(agent, &conn_impl->next_timestamp) != 0) {
 			JLOG_WARN("Agent update failed");
-			mutex_unlock(&conn_impl->mutex);
-			return -1;
+			ret = -1;
+			goto __exit;
 		}
 	}
-
+	ret = 0;
+__exit:
 	mutex_unlock(&conn_impl->mutex);
-	return 0;
+	return ret;
 }
 
 int conn_thread_recv(socket_t sock, char *buffer, size_t size, addr_record_t *src) {
@@ -151,6 +152,7 @@ int conn_thread_run(juice_agent_t *agent) {
 
 		if (conn_thread_process(agent, pfd) < 0)
 			break;
+		usleep(1);
 	}
 
 	JLOG_DEBUG("Leaving connection thread");
@@ -257,7 +259,7 @@ int conn_thread_send(juice_agent_t *agent, const addr_record_t *dst, const char 
 
 	JLOG_VERBOSE("Sending datagram, size=%d", size);
 
-	int ret = udp_sendto(conn_impl->sock, data, size, dst);
+	int ret = juice_udp_sendto(conn_impl->sock, data, size, dst);
 	if (ret < 0) {
 		if (sockerrno == SEAGAIN || sockerrno == SEWOULDBLOCK)
 			JLOG_INFO("Send failed, buffer is full");

@@ -75,6 +75,7 @@ int conn_poll_registry_init(conn_registry_t *registry, udp_socket_config_t *conf
 		return -1;
 	}
 #else
+	/*
 	int pipefds[2];
 	if (pipe(pipefds)) {
 		JLOG_FATAL("Pipe creation failed");
@@ -86,6 +87,7 @@ int conn_poll_registry_init(conn_registry_t *registry, udp_socket_config_t *conf
 	fcntl(pipefds[1], F_SETFL, O_NONBLOCK);
 	registry_impl->interrupt_pipe_out = pipefds[1]; // read
 	registry_impl->interrupt_pipe_in = pipefds[0];  // write
+	*/
 #endif
 
 	registry->impl = registry_impl;
@@ -410,7 +412,7 @@ int conn_poll_send(juice_agent_t *agent, const addr_record_t *dst, const char *d
 
 	JLOG_VERBOSE("Sending datagram, size=%d", size);
 
-	int ret = udp_sendto(conn_impl->sock, data, size, dst);
+	int ret = juice_udp_sendto(conn_impl->sock, data, size, dst);
 	if (ret < 0) {
 		if (sockerrno == SEAGAIN || sockerrno == SEWOULDBLOCK)
 			JLOG_INFO("Send failed, buffer is full");

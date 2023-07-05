@@ -432,6 +432,7 @@ int conn_mux_run(conn_registry_t *registry) {
 
 		if (conn_mux_process(registry, pfd) < 0)
 			break;
+		usleep(1);
 	}
 
 	JLOG_DEBUG("Leaving connections thread");
@@ -519,7 +520,7 @@ int conn_mux_send(juice_agent_t *agent, const addr_record_t *dst, const char *da
 
 	JLOG_VERBOSE("Sending datagram, size=%d", size);
 
-	int ret = udp_sendto(registry_impl->sock, data, size, dst);
+	int ret = juice_udp_sendto(registry_impl->sock, data, size, dst);
 	if (ret < 0) {
 		if (sockerrno == SEAGAIN || sockerrno == SEWOULDBLOCK)
 			JLOG_INFO("Send failed, buffer is full");

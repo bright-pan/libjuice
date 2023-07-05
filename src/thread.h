@@ -68,7 +68,7 @@ static inline void thread_join_impl(thread_t t, thread_return_t *res) {
 
 #include <pthread.h>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(AOS_COMP_POSIX)
 #include <sys/prctl.h> // for prctl(PR_SET_NAME)
 #endif
 #if defined(__FreeBSD__)
@@ -117,7 +117,7 @@ static inline void thread_set_name_self(const char *name) {
 			}
 		}
 	}
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(AOS_COMP_POSIX)
 	prctl(PR_SET_NAME, name);
 #elif defined(__APPLE__)
 	pthread_setname_np(name);

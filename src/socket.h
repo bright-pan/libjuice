@@ -63,10 +63,22 @@ typedef ULONG nfds_t;
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#if defined(CONFIG_LIBJUICE_NETIF_TCPIP_LWIP)
+#include <lwip/netif.h>
+#include <lwip/netdb.h>
+#include "lwip/ip_addr.h"
+#include <lwip/opt.h>
+#include <lwip/sockets.h>
+#include <lwip/sys.h>
+#include <lwip/api.h>
+#include <lwip/inet.h>
+#include <lwip/netdb.h>
+#else
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#endif
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -80,7 +92,7 @@ typedef ULONG nfds_t;
 #define NO_PMTUDISC
 #endif
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(CONFIG_LIBJUICE_NETIF_TCPIP_LWIP)
 #define NO_IFADDRS
 #else
 #include <ifaddrs.h>

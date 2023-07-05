@@ -9,6 +9,7 @@
 #include "ice.h"
 #include "log.h"
 #include "random.h"
+#include "getnameinfo.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -170,7 +171,7 @@ int ice_create_local_candidate(ice_candidate_type_t type, int component, int ind
 	                                           candidate->component, index);
 
 	if (getnameinfo((struct sockaddr *)&record->addr, record->len, candidate->hostname, 256,
-	                candidate->service, 32, NI_NUMERICHOST | NI_NUMERICSERV | NI_DGRAM)) {
+	                candidate->service, 32, NI_NUMERICHOST | NI_NUMERICSERV)) {
 		JLOG_ERROR("getnameinfo failed, errno=%d", sockerrno);
 		return -1;
 	}

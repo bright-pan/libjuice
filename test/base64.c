@@ -6,12 +6,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#include "test_config.h"
 #include "base64.h"
 
 #include <stdint.h>
 #include <string.h>
-
-#define BUFFER_SIZE 1024
 
 int test_base64(void) {
 	const char *str = "Man is distinguished, not only by his reason, but by this singular passion "

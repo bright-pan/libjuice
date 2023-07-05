@@ -41,5 +41,8 @@ bool addr_is_numeric_hostname(const char *hostname);
 bool addr_record_is_equal(const addr_record_t *a, const addr_record_t *b, bool compare_ports);
 int addr_record_to_string(const addr_record_t *record, char *buffer, size_t size);
 unsigned long addr_record_hash(const addr_record_t *record, bool with_port);
+void print_addr_record_string(const char *file, int line, const addr_record_t *record);
+
+#define JUICE_LOG_ADDR_RECORD(...) print_addr_record_string(__FILE__, __LINE__, __VA_ARGS__)
 
 #endif // JUICE_ADDR_H

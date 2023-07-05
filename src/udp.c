@@ -11,6 +11,7 @@
 #include "log.h"
 #include "random.h"
 #include "thread.h" // for mutexes
+#include "socket.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -44,6 +45,16 @@ static uint16_t get_next_port_in_range(uint16_t begin, uint16_t end) {
 	return next;
 }
 
+#if defined(CONFIG_LIBJUICE_NETIF_TCPIP_LWIP)
+int udp_set_block(socket_t sock) {
+	return ( fcntl( sock, F_SETFL, fcntl( sock, F_GETFL, 0 ) & ~O_NONBLOCK ) );
+}
+
+int udp_set_nonblock(socket_t sock) {
+	return ( fcntl( sock, F_SETFL, fcntl( sock, F_GETFL, 0 ) | O_NONBLOCK ) );
+}
+#endif
+
 socket_t udp_create_socket(const udp_socket_config_t *config) {
 	socket_t sock = INVALID_SOCKET;
 
@@ -55,7 +66,7 @@ socket_t udp_create_socket(const udp_socket_config_t *config) {
 	hints.ai_socktype = SOCK_DGRAM;
 	hints.ai_protocol = IPPROTO_UDP;
 	hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
-	if (getaddrinfo(config->bind_address, "0", &hints, &ai_list) != 0) {
+	if (getaddrinfo(config->bind_address, NULL, &hints, &ai_list)) {
 		JLOG_ERROR("getaddrinfo for binding address failed, errno=%d", sockerrno);
 		return INVALID_SOCKET;
 	}
@@ -85,12 +96,14 @@ socket_t udp_create_socket(const udp_socket_config_t *config) {
 
 	assert(ai != NULL);
 
+#if defined (CONFIG_LWIP_USE_IP6)
 	// Listen on both IPv6 and IPv4
 	const sockopt_t disabled = 0;
 	if (ai->ai_family == AF_INET6)
 		setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&disabled, sizeof(disabled));
+#endif
 
-		// Set DF flag
+	// Set DF flag
 #ifndef NO_PMTUDISC
 	const sockopt_t val = IP_PMTUDISC_DO;
 	setsockopt(sock, IPPROTO_IP, IP_MTU_DISCOVER, (const char *)&val, sizeof(val));
@@ -115,11 +128,18 @@ socket_t udp_create_socket(const udp_socket_config_t *config) {
 	setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (const char *)&buffer_size, sizeof(buffer_size));
 	setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (const char *)&buffer_size, sizeof(buffer_size));
 
+#if defined(CONFIG_LIBJUICE_NETIF_TCPIP_LWIP)
+	if (udp_set_nonblock(sock) < 0) {
+		JLOG_ERROR("Setting non-blocking mode on UDP socket failed, errno=%d", sockerrno);
+		goto error;
+	}
+#else
 	ctl_t nbio = 1;
 	if (ioctlsocket(sock, FIONBIO, &nbio)) {
 		JLOG_ERROR("Setting non-blocking mode on UDP socket failed, errno=%d", sockerrno);
 		goto error;
 	}
+#endif
 
 	// Bind it
 	if (config->port_begin == 0 && config->port_end == 0) {
@@ -202,7 +222,7 @@ int udp_recvfrom(socket_t sock, char *buffer, size_t size, addr_record_t *src) {
 	}
 }
 
-int udp_sendto(socket_t sock, const char *data, size_t size, const addr_record_t *dst) {
+int juice_udp_sendto(socket_t sock, const char *data, size_t size, const addr_record_t *dst) {
 #ifndef __linux__
 	addr_record_t tmp = *dst;
 	addr_record_t name;
@@ -346,6 +366,7 @@ int udp_get_local_addr(socket_t sock, int family_hint, addr_record_t *record) {
 		memcpy(&sin->sin_addr, localhost, 4);
 		break;
 	}
+#if defined (CONFIG_LWIP_USE_IP6)
 	case AF_INET6: {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&record->addr;
 		uint8_t *b = (uint8_t *)&sin6->sin6_addr;
@@ -353,6 +374,7 @@ int udp_get_local_addr(socket_t sock, int family_hint, addr_record_t *record) {
 		b[15] = 0x01; // localhost
 		break;
 	}
+#endif
 	default:
 		// Ignore
 		break;
@@ -379,6 +401,7 @@ static int has_duplicate_addr(struct sockaddr *addr, const addr_record_t *record
 					return true;
 				break;
 			}
+#if defined (CONFIG_LWIP_USE_IP6)
 			case AF_INET6: {
 				// For IPv6, compare the network part only
 				const struct sockaddr_in6 *rsin6 = (const struct sockaddr_in6 *)&record->addr;
@@ -387,13 +410,14 @@ static int has_duplicate_addr(struct sockaddr *addr, const addr_record_t *record
 					return true;
 				break;
 			}
+#endif
 			}
 		}
 	}
 	return false;
 }
 
-#if !defined(_WIN32) && defined(NO_IFADDRS)
+#if !defined(_WIN32) && defined(NO_IFADDRS) && defined (CONFIG_LWIP_USE_IP6)
 // Helper function to get the IPv6 address of the default interface
 static int get_local_default_inet6(uint16_t port, struct sockaddr_in6 *result) {
 	const char *dummy_host = "2001:db8::1"; // dummy public unreachable address
@@ -549,6 +573,31 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 	freeifaddrs(ifas);
 
 #else // NO_IFADDRS defined
+
+#if defined(CONFIG_LIBJUICE_NETIF_TCPIP_LWIP)
+	struct sockaddr sa_temp;
+	socklen_t len;
+	struct sockaddr *sa = &sa_temp;
+
+	if (getsockname(sock, sa, &len) < 0) {
+		JLOG_ERROR("Failed to get local address");
+		return -1;
+	}
+
+	if ((sa->sa_family == AF_INET ||
+			(sa->sa_family == AF_INET6 && bound.addr.ss_family == AF_INET6)) &&
+		!addr_is_local(sa) && (len = addr_get_len(sa)) > 0) {
+		if (!has_duplicate_addr(sa, records, current - records)) {
+			++ret;
+			if (current != end) {
+				memcpy(&current->addr, sa, len);
+				current->len = len;
+				addr_set_port((struct sockaddr *)&current->addr, port);
+				++current;
+			}
+		}
+	}
+#else // !CONFIG_LIBJUICE_NETIF_TCPIP_LWIP
 	char buf[4096];
 	struct ifconf ifc;
 	memset(&ifc, 0, sizeof(ifc));
@@ -597,6 +646,7 @@ int udp_get_addrs(socket_t sock, addr_record_t *records, size_t count) {
 			}
 		}
 	}
+#endif //CONFIG_LIBJUICE_NETIF_TCPIP_LWIP
 #endif
 #endif
 
