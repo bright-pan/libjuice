@@ -130,25 +130,18 @@ __exit:
 	mutex_unlock(&log_mutex);
 }
 
-#if defined (AOS_COMP_CLI)
+#if defined(AOS_COMP_CLI)
 #include <aos/cli.h>
-
 static void juice_log(int argc, char **argv) {
-    if (argc != 2) {
-        fprintf(stdout, "Usage: %s [VERBOSE %d|DEBUG %d | INFO %d | WARN %d | ERROR %d | FATAL %d]",
-                argv[0],
-                JUICE_LOG_LEVEL_VERBOSE,
-                JUICE_LOG_LEVEL_DEBUG,
-                JUICE_LOG_LEVEL_INFO,
-                JUICE_LOG_LEVEL_WARN,
-                JUICE_LOG_LEVEL_ERROR,
-                JUICE_LOG_LEVEL_FATAL);
+	if (argc != 2) {
+		fprintf(stdout, "Usage: %s [VERBOSE %d|DEBUG %d | INFO %d | WARN %d | ERROR %d | FATAL %d | NONE %d]",
+		        argv[0], JUICE_LOG_LEVEL_VERBOSE, JUICE_LOG_LEVEL_DEBUG, JUICE_LOG_LEVEL_INFO,
+		        JUICE_LOG_LEVEL_WARN, JUICE_LOG_LEVEL_ERROR, JUICE_LOG_LEVEL_FATAL, JUICE_LOG_LEVEL_NONE);
 		fflush(stdout);
 		return;
-    }
-    juice_set_log_level(atoi(argv[1]));
+	}
+	juice_set_log_level(atoi(argv[1]));
 }
 
 ALIOS_CLI_CMD_REGISTER(juice_log, juice_log, juice_log);
-
 #endif

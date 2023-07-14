@@ -30,4 +30,9 @@ void juice_log_write(juice_log_level_t level, const char *file, int line, const 
 #define JLOG_ERROR_ENABLED juice_log_is_enabled(JUICE_LOG_LEVEL_ERROR)
 #define JLOG_FATAL_ENABLED juice_log_is_enabled(JUICE_LOG_LEVEL_FATAL)
 
+
+#if defined(CONFIG_LIBJUICE_USE_MBEDTLS) && defined(MBEDTLS_DEBUG_C)
+void _ssl_debug(void *ctx, int level, const char *file, int line, const char *str);
+#endif
+
 #endif // JUICE_LOG_H

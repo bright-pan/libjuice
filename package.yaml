@@ -69,6 +69,7 @@ source_file:
   - "src/server.c"
   - "src/juice.c"
   - "src/getnameinfo.c"
+  - "src/dtls_srtp.c"
   - "test/*.c"
 
 ## 第五部分：配置信息
