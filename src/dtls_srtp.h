@@ -57,9 +57,8 @@ typedef struct dtls_srtp {
     unsigned char remote_policy_key[SRTP_MASTER_KEY_LENGTH + SRTP_MASTER_SALT_LENGTH];
     unsigned char local_policy_key[SRTP_MASTER_KEY_LENGTH + SRTP_MASTER_SALT_LENGTH];
 
-
-    int (*udp_send)(void *ctx, const char *buf, size_t len);
-    int (*udp_recv)(void *ctx, char *buf, size_t len);
+    mbedtls_ssl_send_t *udp_send;
+    mbedtls_ssl_recv_t *udp_recv;
 
     addr_record_t *remote_addr;
 

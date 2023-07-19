@@ -166,8 +166,8 @@ int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_dat
     dtls_srtp->role = role;
     dtls_srtp->state = DTLS_SRTP_STATE_INIT;
     dtls_srtp->user_data = user_data;
-    dtls_srtp->udp_send = dtls_srtp_udp_send;
-    dtls_srtp->udp_recv = dtls_srtp_udp_recv;
+    dtls_srtp->udp_send = (mbedtls_ssl_send_t *)dtls_srtp_udp_send;
+    dtls_srtp->udp_recv = (mbedtls_ssl_recv_t *)dtls_srtp_udp_recv;
 
     mbedtls_ssl_config_init(&dtls_srtp->conf);
     mbedtls_ssl_init(&dtls_srtp->ssl);
@@ -370,7 +370,7 @@ static int dtls_srtp_do_handshake(dtls_srtp_t *dtls_srtp) {
 
     mbedtls_ssl_set_export_keys_cb(&dtls_srtp->ssl, dtls_srtp_key_derivation, dtls_srtp);
 
-    mbedtls_ssl_set_bio(&dtls_srtp->ssl, dtls_srtp, (mbedtls_ssl_send_t *)dtls_srtp->udp_send,  (mbedtls_ssl_recv_t *)dtls_srtp->udp_recv, NULL);
+    mbedtls_ssl_set_bio(&dtls_srtp->ssl, dtls_srtp, dtls_srtp->udp_send, dtls_srtp->udp_recv, NULL);
 
     do {
 

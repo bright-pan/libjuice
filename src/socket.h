@@ -66,7 +66,7 @@ typedef ULONG nfds_t;
 #if defined(CONFIG_LIBJUICE_NETIF_TCPIP_LWIP)
 #include <lwip/netif.h>
 #include <lwip/netdb.h>
-#include "lwip/ip_addr.h"
+#include <lwip/ip_addr.h>
 #include <lwip/opt.h>
 #include <lwip/sockets.h>
 #include <lwip/sys.h>
