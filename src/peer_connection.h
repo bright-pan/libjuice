@@ -21,15 +21,14 @@ extern "C" {
 // #include "rtcp_packet.h"
 
 typedef enum peer_connection_state {
-  PEER_CONNECTION_INIT = 0,
-  PEER_CONNECTION_NEW,
-  PEER_CONNECTION_CONNECTING,
-  PEER_CONNECTION_CONNECTED,
-  PEER_CONNECTION_COMPLETED,
-  PEER_CONNECTION_FAILED,
-  PEER_CONNECTION_DISCONNECTED,
-  PEER_CONNECTION_CLOSED,
-
+    PEER_CONNECTION_INIT = 0,
+    PEER_CONNECTION_START,
+    PEER_CONNECTION_CONNECTING,
+    PEER_CONNECTION_CONNECTED,
+    PEER_CONNECTION_COMPLETED,
+    PEER_CONNECTION_FAILED,
+    PEER_CONNECTION_DISCONNECTED,
+    PEER_CONNECTION_CLOSED,
 } peer_connection_state_t;
 
 typedef struct peer_options {
@@ -48,54 +47,59 @@ typedef struct peer_options {
 } peer_options_t;
 
 typedef struct peer_connect {
-  char *name;
-  peer_options_t options;
-  peer_connection_state_t state;
-  juice_agent_t juice_agent;
-  juice_state_t juice_state;
+    char *name;
+    uint32_t stack_size;
+    dtls_srtp_role_t role;
+    peer_options_t options;
+    peer_connection_state_t state;
+    juice_agent_t *juice_agent;
+    juice_state_t juice_state;
 	ice_candidate_t local_cand, remote_cand;
-  dtls_srtp_t dtls_srtp;
-  // Sctp sctp;
+    dtls_srtp_t dtls_srtp;
+    // Sctp sctp;
 
-  char local_sdp[JUICE_MAX_SDP_STRING_LEN];
-  char remote_sdp[JUICE_MAX_SDP_STRING_LEN];
+    char local_sdp[JUICE_MAX_SDP_STRING_LEN];
+    char remote_sdp[JUICE_MAX_SDP_STRING_LEN];
 
-  void (*onicecandidate)(char *sdp, void *user_data);
-  void (*oniceconnectionstatechange)(peer_connection_state_t state, void *user_data);
-  void (*ontrack)(uint8_t *packet, size_t bytes, void *user_data);
-  void (*on_connected)(void *userdata);
-  void (*on_receiver_packet_loss)(float fraction_loss, uint32_t total_loss, void *user_data);
+    void (*cb_candidate)(char *sdp, void *user_data);
+    void (*cb_state_change)(peer_connection_state_t state, void *user_data);
+    void (*cb_track)(uint8_t *packet, size_t bytes, void *user_data);
+    void (*cb_connected)(void *userdata);
+    void (*cb_receiver_packet_loss)(float fraction_loss, uint32_t total_loss, void *user_data);
 
-  void *user_data;
+    void *user_data;
 
-  // uint8_t temp_buf[CONFIG_MTU];
-  rtc_fifo_t recv_fifo;
-  // uint8_t agent_buf[CONFIG_MTU];
-  // int agent_ret;
-  // int b_offer_created;
+    // uint8_t temp_buf[CONFIG_MTU];
+    rtc_fifo_t recv_fifo;
+    // uint8_t agent_buf[CONFIG_MTU];
+    // int agent_ret;
+    // int b_offer_created;
 
-  // Buffer *audio_rb[2];
-  // Buffer *video_rb[2];
-  // Buffer *data_rb[2];
-  void (*loop)(void *param);
+    // Buffer *audio_rb[2];
+    // Buffer *video_rb[2];
+    // Buffer *data_rb[2];
+    void (*loop)(void *param);
 
-#ifdef HAVE_GST
-  MediaStream *audio_stream;
-  MediaStream *video_stream;
-#else
-  // RtpPacketizer audio_packetizer;
-  // RtpPacketizer video_packetizer;
-#endif
+    #ifdef HAVE_GST
+    MediaStream *audio_stream;
+    MediaStream *video_stream;
+    #else
+    // RtpPacketizer audio_packetizer;
+    // RtpPacketizer video_packetizer;
+    #endif
 
 } peer_connection_t;
 
-void peer_connection_configure(peer_connection_t *pc, char *name, peer_options_t *options);
+void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role_t role, peer_options_t *options);
 
 void peer_connection_init(peer_connection_t *pc);
 
 void peer_connection_set_remote_description(peer_connection_t *pc, const char *sdp);
+void peer_connection_add_remote_candidate(peer_connection_t *pc, const char *sdp);
+void peer_connection_start(peer_connection_t *pc);
 
-void peer_connection_create_offer(peer_connection_t *pc);
+int peer_connection_dtls_srtp_recv(void *ctx, char *buf, size_t len);
+int peer_connection_dtls_srtp_send(void *ctx, const char *buf, size_t len);
 
 /**
  * @brief register callback function to handle packet loss from RTCP receiver report
@@ -103,7 +107,7 @@ void peer_connection_create_offer(peer_connection_t *pc);
  * @param[in] callback function void (*cb)(float fraction_loss, uint32_t total_loss, void *userdata)
  * @param[in] userdata for callback function
  */
-void peer_connection_on_receiver_packet_loss(peer_connection_t *pc,
+void peer_connection_set_cb_receiver_packet_loss(peer_connection_t *pc,
  void (*on_receiver_packet_loss)(float fraction_loss, uint32_t total_loss, void *userdata));
 
 /**
@@ -112,31 +116,28 @@ void peer_connection_on_receiver_packet_loss(peer_connection_t *pc,
  * @param[in] callback function void (*cb)(void *userdata)
  * @param[in] userdata for callback function
  */
-void peer_connection_on_connected(peer_connection_t *pc, void (*on_connected)(void *userdata));
+void peer_connection_set_cb_connected(peer_connection_t *pc, void (*on_connected)(void *userdata));
 /**
  * @brief Set the callback function to handle onicecandidate event.
  * @param A peer_connection_t.
  * @param A callback function to handle onicecandidate event.
  * @param A userdata which is pass to callback function. 
  */
-void peer_connection_onicecandidate(peer_connection_t *pc, void (*onicecandidate)(char *sdp_text, void *userdata));
-
+void peer_connection_set_cb_candidate(peer_connection_t *pc, void (*on_candidate)(char *sdp_text, void *userdata));
 /**
  * @brief Set the callback function to handle oniceconnectionstatechange event.
  * @param A peer_connection_t.
  * @param A callback function to handle oniceconnectionstatechange event.
  * @param A userdata which is pass to callback function. 
  */
-void peer_connection_oniceconnectionstatechange(peer_connection_t *pc,
- void (*oniceconnectionstatechange)(peer_connection_state_t state, void *userdata));
-
+void peer_connection_set_cb_state_change(peer_connection_t *pc, void (*on_state_change)(peer_connection_state_t state, void *userdata));
 /**
  * @brief Set the callback function to handle ontrack event.
  * @param A peer_connection_t.
  * @param A callback function to handle ontrack event.
  * @param A userdata which is pass to callback function. 
  */
-void peer_connection_ontrack(peer_connection_t *pc, void (*ontrack)(uint8_t *packet, size_t bytes, void *userdata));
+void peer_connection_set_cb_track(peer_connection_t *pc, void (*on_track)(uint8_t *packet, size_t bytes, void *userdata));
 
 
 /**
@@ -146,7 +147,7 @@ void peer_connection_ontrack(peer_connection_t *pc, void (*ontrack)(uint8_t *pac
  * @param[in] callback function when connection is opened
  * @param[in] callback function when connection is closed
  */
-void peer_connection_ondatachannel(peer_connection_t *pc,
+void peer_connection_set_cbdatachannel(peer_connection_t *pc,
  void (*onmessasge)(char *msg, size_t len, void *userdata),
  void (*onopen)(void *userdata),
  void (*onclose)(void *userdata));

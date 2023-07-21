@@ -49,6 +49,16 @@ JUICE_EXPORT int juice_get_local_description(juice_agent_t *agent, char *buffer,
 	return JUICE_ERR_SUCCESS;
 }
 
+JUICE_EXPORT int juice_get_remote_description(juice_agent_t *agent, char *buffer, size_t size) {
+	if (!agent || (!buffer && size))
+		return JUICE_ERR_INVALID;
+
+	if (agent_get_remote_description(agent, buffer, size) < 0)
+		return JUICE_ERR_FAILED;
+
+	return JUICE_ERR_SUCCESS;
+}
+
 JUICE_EXPORT int juice_set_remote_description(juice_agent_t *agent, const char *sdp) {
 	if (!agent || !sdp)
 		return JUICE_ERR_INVALID;

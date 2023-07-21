@@ -451,6 +451,24 @@ int agent_get_local_description(juice_agent_t *agent, char *buffer, size_t size)
 	return 0;
 }
 
+int agent_get_remote_description(juice_agent_t *agent, char *buffer, size_t size) {
+	conn_lock(agent);
+	if (ice_generate_sdp(&agent->remote, buffer, size) < 0) {
+		JLOG_ERROR("Failed to generate remote SDP description");
+		conn_unlock(agent);
+		return -1;
+	}
+	JLOG_VERBOSE("Generated remote SDP description: %s", buffer);
+
+	if (agent->mode == AGENT_MODE_UNKNOWN) {
+		JLOG_DEBUG("Assuming controlling mode");
+		agent->mode = AGENT_MODE_CONTROLLING;
+	}
+
+	conn_unlock(agent);
+	return 0;
+}
+
 int agent_set_remote_description(juice_agent_t *agent, const char *sdp) {
 	conn_lock(agent);
 	JLOG_VERBOSE("Setting remote SDP description: %s", sdp);
