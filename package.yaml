@@ -73,6 +73,10 @@ source_file:
   - "src/peer_connection.c"
   - "src/ring_fifo.c"
   - "src/packet.c"
+  - "src/rtp.c"
+  - "src/rtcp_packet.c"
+  - "src/sdp.c"
+  - "src/sctp.c"
   - "test/*.c"
 
 ## 第五部分：配置信息

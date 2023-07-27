@@ -20,4 +20,13 @@
 // #define TURN_SERVER_USERNAME "582e76da4d1dca59a632a28c"
 // #define TURN_SERVER_PASSWORD "8spay3NSF+9uslHA"
 
+
+#define SCTP_MTU (1200)
+#define CONFIG_MTU (1434)
+
+
+#define VIDEO_RB_DATA_LENGTH (CONFIG_MTU * 64)
+#define AUDIO_RB_DATA_LENGTH (CONFIG_MTU * 64)
+#define DATA_RB_DATA_LENGTH (SCTP_MTU * 64)
+
 #endif

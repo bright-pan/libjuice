@@ -316,7 +316,7 @@ void peer_connection_loop(void *param) {
                 JLOG_INFO("%s local address: %s\n", pc->name, address);
                 addr_record_to_string(&pc->remote_cand.resolved, address, JUICE_MAX_ADDRESS_STRING_LEN);
                 JLOG_INFO("%s remote address: %s\n", pc->name, address);
-                STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
+                STATE_CHANGED(pc, PEER_CONNECTION_HANDSHAKE);
             } else {
                 //no avail
             }
@@ -339,6 +339,7 @@ void peer_connection_loop(void *param) {
                 packet_fifo_reset(&pc->other_fifo);
                 packet_fifo_reset(&pc->rtp_fifo);
                 //juice_suspend(pc->juice_agent);
+                JLOG_INFO("DTLS-SRTP %s handshake start", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
                 if (dtls_srtp_handshake(&pc->dtls_srtp, &pc->remote_cand.resolved) == 0) {
 
                 JLOG_INFO("DTLS-SRTP %s handshake done", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
