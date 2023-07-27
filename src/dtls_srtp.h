@@ -75,6 +75,7 @@ typedef struct dtls_srtp {
 
 } dtls_srtp_t;
 
+void dtls_srtp_ssl_dbg_init(dtls_srtp_t *dtls_srtp, int enable, int level);
 int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_data);
 
 void dtls_srtp_deinit(dtls_srtp_t *dtls_srtp);
@@ -85,9 +86,9 @@ int dtls_srtp_handshake(dtls_srtp_t *dtls_srtp, addr_record_t *addr);
 
 void dtls_srtp_reset_session(dtls_srtp_t *dtls_srtp);
 
-int dtls_srtp_write(dtls_srtp_t *dtls_srtp, const unsigned char *buf, size_t len);
+int dtls_srtp_write(dtls_srtp_t *dtls_srtp, const char *buf, size_t len);
 
-int dtls_srtp_read(dtls_srtp_t *dtls_srtp, unsigned char *buf, size_t len);
+int dtls_srtp_read(dtls_srtp_t *dtls_srtp, char *buf, size_t len);
 
 void dtls_srtp_encrypt_rtp_packet(dtls_srtp_t *dtls_srtp, unsigned char *packet, int *bytes);
 

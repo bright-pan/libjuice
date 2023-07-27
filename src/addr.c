@@ -329,8 +329,8 @@ unsigned long addr_record_hash(const addr_record_t *record, bool with_port) {
 }
 
 void print_addr_record_string(const char *file, int line, const addr_record_t *record) {
-	char buf[64];
-	addr_record_to_string(record, buf, sizeof(buf));
+	char buf[JUICE_MAX_ADDRESS_STRING_LEN];
+	addr_record_to_string(record, buf, JUICE_MAX_ADDRESS_STRING_LEN);
 	juice_log_write(JUICE_LOG_LEVEL_INFO, file, line, buf);
 }
 

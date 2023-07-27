@@ -13,18 +13,22 @@ extern "C" {
 #include "juice.h"
 #include "agent.h"
 #include "dtls_srtp.h"
-#include "rtc_fifo.h"
+#include "packet.h"
 // #include "sdp.h"
 // #include "codec.h"
 // #include "config.h"
 // #include "rtp.h"
 // #include "rtcp_packet.h"
 
+
+#define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
+
+
 typedef enum peer_connection_state {
     PEER_CONNECTION_INIT = 0,
     PEER_CONNECTION_START,
     PEER_CONNECTION_CONNECTING,
-    PEER_CONNECTION_CONNECTED,
+    PEER_CONNECTION_HANDSHAKE,
     PEER_CONNECTION_COMPLETED,
     PEER_CONNECTION_FAILED,
     PEER_CONNECTION_DISCONNECTED,
@@ -48,7 +52,8 @@ typedef struct peer_options {
 
 typedef struct peer_connect {
     char *name;
-    uint32_t stack_size;
+    uint32_t stack_size; //loop 线程堆栈大小
+    uint32_t recv_timeout; // 接收等待时间
     dtls_srtp_role_t role;
     peer_options_t options;
     peer_connection_state_t state;
@@ -70,7 +75,9 @@ typedef struct peer_connect {
     void *user_data;
 
     // uint8_t temp_buf[CONFIG_MTU];
-    rtc_fifo_t recv_fifo;
+    packet_fifo_t dtls_fifo;
+    packet_fifo_t rtp_fifo;
+    packet_fifo_t other_fifo;
     // uint8_t agent_buf[CONFIG_MTU];
     // int agent_ret;
     // int b_offer_created;
@@ -98,8 +105,8 @@ void peer_connection_set_remote_description(peer_connection_t *pc, const char *s
 void peer_connection_add_remote_candidate(peer_connection_t *pc, const char *sdp);
 void peer_connection_start(peer_connection_t *pc);
 
-int peer_connection_dtls_srtp_recv(void *ctx, char *buf, size_t len);
-int peer_connection_dtls_srtp_send(void *ctx, const char *buf, size_t len);
+int peer_connection_dtls_recv(void *ctx, char *buf, size_t len);
+int peer_connection_dtls_send(void *ctx, const char *buf, size_t len);
 
 /**
  * @brief register callback function to handle packet loss from RTCP receiver report

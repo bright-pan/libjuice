@@ -18,8 +18,9 @@ int dtls_srtp_udp_send(void *ctx, const char *buf, size_t len) {
 
     int ret = juice_udp_sendto(*udp_socket, buf, len, dtls_srtp->remote_addr);
 
-    // JLOG_DEBUG("dtls_srtp_udp_send (%d)", ret);
-    // JLOG_ADDR_RECORD(dtls_srtp->remote_addr);
+    if (dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
+        JLOG_INFO("dtls server send: %d", ret);
+    }
 
     return ret;
 }
@@ -30,13 +31,16 @@ int dtls_srtp_udp_recv(void *ctx, char *buf, size_t len) {
     socket_t *udp_socket = (socket_t *)dtls_srtp->user_data;
     addr_record_t _addr;
 
+    // static char buffer[JUICE_MAX_ADDRESS_STRING_LEN];
     int ret;
-
+    // addr_record_to_string(&_addr, buffer, JUICE_MAX_ADDRESS_STRING_LEN);
+    // JLOG_INFO("dtls_srtp_udp_recv start %s", buffer);
     while ((ret = udp_recvfrom(*udp_socket, buf, len, &_addr)) <= 0) {
-
         usleep(1000);
     }
-
+    if (dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
+        JLOG_INFO("dtls server recv: %d", ret);
+    }
     // JLOG_DEBUG("dtls_srtp_udp_recv (%d)", ret);
     // JLOG_ADDR_RECORD(&_addr);
 
@@ -180,9 +184,9 @@ int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_dat
     dtls_srtp_selfsign_cert(dtls_srtp);
 
 #if defined(CONFIG_LIBJUICE_USE_MBEDTLS) && defined(MBEDTLS_DEBUG_C)
-    if (dtls_srtp->ssl_debug_enable) {
+    if (dtls_srtp->ssl_debug_enable && dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
         mbedtls_ssl_conf_dbg(&dtls_srtp->conf, _ssl_debug, NULL);
-        //mbedtls_debug_set_threshold(dtls_srtp->ssl_debug_level);
+        mbedtls_debug_set_threshold(dtls_srtp->ssl_debug_level);
     }
 #endif
 
@@ -331,7 +335,7 @@ static void dtls_srtp_key_derivation(void *context, mbedtls_ssl_key_export_type 
         return;
     }
 
-    JLOG_INFO("Created inbound SRTP session");
+    JLOG_INFO("%s Created inbound SRTP session", dtls_srtp->role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
 
     // derive outbounds keys
     memset(&dtls_srtp->local_policy, 0, sizeof(dtls_srtp->local_policy));
@@ -355,7 +359,7 @@ static void dtls_srtp_key_derivation(void *context, mbedtls_ssl_key_export_type 
         return;
     }
 
-    JLOG_INFO("Created outbound SRTP session");
+    JLOG_INFO("%s Created outbound SRTP session", dtls_srtp->role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
     dtls_srtp->state = DTLS_SRTP_STATE_CONNECTED;
 }
 
@@ -458,7 +462,7 @@ int dtls_srtp_handshake(dtls_srtp_t *dtls_srtp, addr_record_t *addr) {
     dtls_srtp->remote_addr = addr;
 
     if (dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
-
+        
         ret = dtls_srtp_handshake_server(dtls_srtp);
 
     } else {
@@ -495,19 +499,19 @@ void dtls_srtp_reset_session(dtls_srtp_t *dtls_srtp) {
     dtls_srtp->state = DTLS_SRTP_STATE_INIT;
 }
 
-int dtls_srtp_write(dtls_srtp_t *dtls_srtp, const unsigned char *buf, size_t len) {
+int dtls_srtp_write(dtls_srtp_t *dtls_srtp, const char *buf, size_t len) {
 
     int ret;
 
     do {
 
-        ret = mbedtls_ssl_write(&dtls_srtp->ssl, buf, len);
+        ret = mbedtls_ssl_write(&dtls_srtp->ssl, (unsigned char *)buf, len);
 
     } while (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
     return ret;
 }
 
-int dtls_srtp_read(dtls_srtp_t *dtls_srtp, unsigned char *buf, size_t len) {
+int dtls_srtp_read(dtls_srtp_t *dtls_srtp, char *buf, size_t len) {
 
     int ret;
 
@@ -515,7 +519,7 @@ int dtls_srtp_read(dtls_srtp_t *dtls_srtp, unsigned char *buf, size_t len) {
 
     do {
 
-        ret = mbedtls_ssl_read(&dtls_srtp->ssl, buf, len);
+        ret = mbedtls_ssl_read(&dtls_srtp->ssl, (unsigned char *)buf, len);
 
     } while (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
 

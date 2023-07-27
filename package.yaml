@@ -71,7 +71,8 @@ source_file:
   - "src/getnameinfo.c"
   - "src/dtls_srtp.c"
   - "src/peer_connection.c"
-  - "src/rtc_fifo.c"
+  - "src/ring_fifo.c"
+  - "src/packet.c"
   - "test/*.c"
 
 ## 第五部分：配置信息

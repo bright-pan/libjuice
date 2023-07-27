@@ -5,7 +5,10 @@
 #include "config.h"
 #include "peer_connection.h"
 
-#define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
+// #define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
+
+
+#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
 
 // Turn server config
 static juice_turn_server_t turn_server;
@@ -24,11 +27,11 @@ static void peer_connection_set_cb_rtp_packet(const uint8_t *packet, size_t byte
   // }
 }
 */
-
 #define PER_TIMEOUT 100 //ms
 
 #define TIMEOUT_COUNT(timeout, per) (((timeout) / (per)) ? ((timeout) / (per)) : 1)
 
+/*
 uint32_t rtc_fifo_read_timeout(rtc_fifo_t *fifo, void *outbuf, uint32_t len, uint32_t timeout) {
     uint32_t fifo_len = rtc_fifo_len(fifo);
     uint32_t ret = 0;
@@ -48,25 +51,50 @@ uint32_t rtc_fifo_read_timeout(rtc_fifo_t *fifo, void *outbuf, uint32_t len, uin
         return rtc_fifo_read(fifo, outbuf, len);
     }
 }
+*/
 
-int peer_connection_dtls_srtp_recv(void *ctx, char *buf, size_t len) {
-
-    // static const int MAX_RECV = 10000;
-    // int recv_max = 0; 
-    // int ret; 
+int peer_connection_dtls_recv(void *ctx, char *buf, size_t len) {
+    int recv_count;
     dtls_srtp_t *dtls_srtp = (dtls_srtp_t *) ctx; 
     peer_connection_t *pc = (peer_connection_t *) dtls_srtp->user_data;
-    return rtc_fifo_read_timeout(&pc->recv_fifo, buf, len, 2000);
+    uint32_t timeout_count = TIMEOUT_COUNT(pc->recv_timeout, PER_TIMEOUT);
+
+    while (timeout_count > 0) {
+        // recv_count = msg_fifo_read(&pc->msg_fifo, &recv_frame);
+        recv_count = packet_fifo_read(&pc->dtls_fifo, buf, len);
+        if (recv_count > 0) {
+            // recv_count = MIN(len, recv_frame.data_size);
+            // memcpy(buf, recv_frame.data, recv_count);
+            return recv_count;
+        } else {
+            // no data
+            usleep(1000 * PER_TIMEOUT);
+            timeout_count--;
+        }
+    }
+    return MBEDTLS_ERR_SSL_WANT_READ;
 }
+/*
+extern int dtls_srtp_udp_recv(void *ctx, char *buf, size_t len);
 
-int peer_connection_dtls_srtp_send(void *ctx, const char *buf, size_t len) {
-  
-  dtls_srtp_t *dtls_srtp = (dtls_srtp_t *)ctx; 
-  peer_connection_t *pc = (peer_connection_t *) dtls_srtp->user_data;
+int peer_connection_dtls_srtp_recv(void *ctx, char *buf, size_t len) {
+    dtls_srtp_t *dtls_srtp = (dtls_srtp_t *) ctx;
+    return dtls_srtp_udp_recv(dtls_srtp, buf, len);
+}
+*/
+int peer_connection_dtls_send(void *ctx, const char *buf, size_t len) {
+    int ret;
+    dtls_srtp_t *dtls_srtp = (dtls_srtp_t *)ctx; 
+    peer_connection_t *pc = (peer_connection_t *) dtls_srtp->user_data;
 
-  // //JLOG_DEBUG("send %.4x %.4x, %ld", *(uint16_t*)buf, *(uint16_t*)(buf + 2), len); 
-  // return agent_send(pc->juice_agent, buf, len);
-  return juice_send(pc->juice_agent, buf, len);
+    // //JLOG_DEBUG("send %.4x %.4x, %ld", *(uint16_t*)buf, *(uint16_t*)(buf + 2), len); 
+    // return agent_send(pc->juice_agent, buf, len);
+    ret = juice_send(pc->juice_agent, buf, len);
+    if (ret == JUICE_ERR_SUCCESS) {
+        return len;
+    } else {
+        return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
+    }
 }
 
 static inline char *juice_mode_string(agent_mode_t mode) {
@@ -99,7 +127,8 @@ static void agent_on_state_changed(juice_agent_t *agent, juice_state_t state, vo
         // memset(message, '\0', 64);
         // snprintf(message, 64, "hello from %s", pc->name);
         // juice_send(agent, message, strlen(message));
-        //STATE_CHANGED(pc, PEER_CONNECTION_CONNECTED);
+		//agent_change_state(pc->juice_agent, JUICE_STATE_HANDSHAKE);
+        STATE_CHANGED(pc, PEER_CONNECTION_CONNECTING);
     }
 }
 
@@ -127,12 +156,19 @@ static void agent_on_gathering_done(juice_agent_t *agent, void *user_ptr) {
 // Agent on message received
 static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, void *user_ptr) {
     peer_connection_t *pc = user_ptr;
+    if((data[0]>=128) && (data[0]<=191)) {
+        JLOG_INFO( "%s recv rtp: %ld", pc->name, size);
+        packet_fifo_write(&pc->rtp_fifo, (char *)data, size);
+        return;
+    }
+    if((data[0]>=20)  && (data[0]<=64)) {
+        JLOG_INFO( "%s recv dtls: %ld", pc->name, size);
+        packet_fifo_write(&pc->dtls_fifo, (char *)data, size);
+        return;
+    }
 
-	char buffer[BUFFER_SIZE];
-    snprintf(buffer, size + 1, "%s", data);
-    JLOG_INFO( "%s recv: %s, %ld", pc->name, buffer, size);
-
-    rtc_fifo_write(&pc->recv_fifo, data, size);
+    JLOG_INFO( "%s recv other: %ld", pc->name, size);
+    packet_fifo_write(&pc->other_fifo, (char *)data, size);
 }
 
 /*
@@ -273,7 +309,6 @@ void peer_connection_loop(void *param) {
             break;
 
             case PEER_CONNECTION_CONNECTING:
-            
             if (agent_get_selected_candidate_pair(pc->juice_agent, &pc->local_cand, &pc->remote_cand) == 0) {
                 char address[JUICE_MAX_ADDRESS_STRING_LEN];
                 memset(address, 0, JUICE_MAX_ADDRESS_STRING_LEN);
@@ -281,7 +316,7 @@ void peer_connection_loop(void *param) {
                 JLOG_INFO("%s local address: %s\n", pc->name, address);
                 addr_record_to_string(&pc->remote_cand.resolved, address, JUICE_MAX_ADDRESS_STRING_LEN);
                 JLOG_INFO("%s remote address: %s\n", pc->name, address);
-                STATE_CHANGED(pc, PEER_CONNECTION_CONNECTED);
+                STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
             } else {
                 //no avail
             }
@@ -290,7 +325,7 @@ void peer_connection_loop(void *param) {
 
             //     JLOG_DEBUG("Connectivity check success. pair: %p", pc->juice_agent.nominated_pair);
 
-            //     STATE_CHANGED(pc, PEER_CONNECTION_CONNECTED);
+            //     STATE_CHANGED(pc, PEER_CONNECTION_HANDSHAKE);
             //     pc->juice_agent.selected_pair = pc->juice_agent.nominated_pair;
             //   }
 
@@ -298,12 +333,15 @@ void peer_connection_loop(void *param) {
 
             break;
 
-            case PEER_CONNECTION_CONNECTED:
+            case PEER_CONNECTION_HANDSHAKE:
             if (pc->dtls_srtp.state == DTLS_SRTP_STATE_INIT) {
-
+                packet_fifo_reset(&pc->dtls_fifo);
+                packet_fifo_reset(&pc->other_fifo);
+                packet_fifo_reset(&pc->rtp_fifo);
+                //juice_suspend(pc->juice_agent);
                 if (dtls_srtp_handshake(&pc->dtls_srtp, &pc->remote_cand.resolved) == 0) {
 
-                JLOG_DEBUG("DTLS-SRTP handshake done");
+                JLOG_INFO("DTLS-SRTP %s handshake done", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
 
         #ifdef HAVE_GST
                 if (pc->audio_stream) {
@@ -323,7 +361,7 @@ void peer_connection_loop(void *param) {
 
                 }
             } else if (pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
-
+                    //juice_resume(pc->juice_agent);
         //         uint16_t bytes;
 
         //         if (utils_buffer_pop(pc->audio_rb[0], (uint8_t*)&bytes, sizeof(bytes)) > 0) {
@@ -350,7 +388,7 @@ void peer_connection_loop(void *param) {
         //             dtls_srtp_write(&pc->dtls_srtp, pc->juice_agent_buf, bytes);
         //          }
                 }
-
+                STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
                 // if ((pc->juice_agent_ret = agent_recv(pc->juice_agent, pc->juice_agent_buf, sizeof(pc->juice_agent_buf))) > 0) {
                 //   JLOG_DEBUG("agent_recv %d", pc->juice_agent_ret);
 
@@ -387,7 +425,7 @@ void peer_connection_loop(void *param) {
             default:
             break;
         }
-        aos_msleep(10);
+        aos_msleep(100);
     }
 }
 
@@ -402,12 +440,21 @@ void peer_connection_init(peer_connection_t *pc) {
 
 //   pc->juice_agent.mode = AGENT_MODE_CONTROLLED;
 
-    rtc_fifo_init(&pc->recv_fifo, 1024, 1); //blk size == 1 for bytes fifo
+    //rtc_fifo_init(&pc->msg_fifo, 64, sizeof(recv_packet_t)); //blk size == 1 for bytes fifo
+    packet_fifo_init(&pc->rtp_fifo);
+    packet_fifo_init(&pc->dtls_fifo);
+    packet_fifo_init(&pc->other_fifo);
 //   memset(&pc->sctp, 0, sizeof(pc->sctp));
+    if (pc->role == DTLS_SRTP_ROLE_SERVER) {
+        pc->recv_timeout = 1000*10;
+    } else {
+        pc->recv_timeout = 1000;
+    }
     pc->juice_agent = juice_create(&pc->options.juice_config);
+    dtls_srtp_ssl_dbg_init(&pc->dtls_srtp, 1, 0);
     dtls_srtp_init(&pc->dtls_srtp, pc->role, pc);
-    pc->dtls_srtp.udp_recv = (mbedtls_ssl_recv_t *)peer_connection_dtls_srtp_recv;
-    pc->dtls_srtp.udp_send = (mbedtls_ssl_send_t *)peer_connection_dtls_srtp_send;
+    pc->dtls_srtp.udp_recv = (mbedtls_ssl_recv_t *)peer_connection_dtls_recv;
+    pc->dtls_srtp.udp_send = (mbedtls_ssl_send_t *)peer_connection_dtls_send;
     pc->loop = peer_connection_loop;
 
     peer_connection_loop_run(pc);

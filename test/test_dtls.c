@@ -45,7 +45,8 @@ void test_handshake(char *role) {
         udp_socket_config.port_begin = 5677;
         udp_socket_config.port_end = 5677;
         udp_socket = udp_create_socket(&udp_socket_config);
-    
+        
+        dtls_srtp_ssl_dbg_init(&dtls_srtp, 1, 0);
         dtls_srtp_init(&dtls_srtp, DTLS_SRTP_ROLE_SERVER, &udp_socket);
     }
     
@@ -53,7 +54,7 @@ void test_handshake(char *role) {
     dtls_srtp_handshake(&dtls_srtp, &remote_addr);
     JLOG_INFO("----------- %s handshake end -----------", role);
 
-    unsigned char buf[64];
+    char buf[64];
 
     memset(buf, 0, sizeof(buf));
 
