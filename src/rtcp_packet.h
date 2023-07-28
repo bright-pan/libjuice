@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-typedef enum RtcpType {
+typedef enum {
 
   RTCP_FIR = 192,
   RTCP_SR = 200,
@@ -15,9 +15,9 @@ typedef enum RtcpType {
   RTCP_PSFB = 206,
   RTCP_XR = 207,
 
-} RtcpType;
+} rtcp_type_t;
 
-typedef struct RtcpHeader {
+typedef struct {
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     uint16_t rc:5;
@@ -32,9 +32,9 @@ typedef struct RtcpHeader {
 #endif
     uint16_t length:16;
 
-} RtcpHeader;
+} rtcp_header_t;
 
-typedef struct RtcpReportBlock {
+typedef struct {
 
   uint32_t ssrc;
   uint32_t flcnpl;
@@ -43,32 +43,32 @@ typedef struct RtcpReportBlock {
   uint32_t lsr;
   uint32_t dlsr;
 
-} RtcpReportBlock;
+} rtcp_report_block_t;
 
 
-typedef struct RtcpRr {
+typedef struct {
 
-  RtcpHeader header;
+  rtcp_header_t header;
   uint32_t ssrc;
-  RtcpReportBlock report_block[1];
+  rtcp_report_block_t report_block[1];
 
-} RtcpRr;
+} rtcp_rr_t;
 
-typedef struct RtcpFir {
+typedef struct {
 
   uint32_t ssrc;
   uint32_t seqnr;
 
-} RtcpFir;
+} rtcp_fir_t;
 
-typedef struct RtcpFb {
+typedef struct {
 
-  RtcpHeader header;
+  rtcp_header_t header;
   uint32_t ssrc;
   uint32_t media;
   char fci[1];
 
-} RtcpFb;
+} rtcp_fb_t;
 
 int rtcp_packet_validate(uint8_t *packet, size_t size);
 
@@ -76,6 +76,6 @@ int rtcp_packet_get_pli(uint8_t *packet, int len, uint32_t ssrc);
 
 int rtcp_packet_get_fir(uint8_t *packet, int len, int *seqnr);
 
-RtcpRr rtcp_packet_parse_rr(uint8_t *packet);
+rtcp_rr_t rtcp_packet_parse_rr(uint8_t *packet);
 
 #endif // RTCP_PACKET_H_

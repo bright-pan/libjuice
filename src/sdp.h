@@ -6,22 +6,22 @@
 #define SDP_CONTENT_LENGTH 10240
 #define SDP_ATTR_LENGTH 128
 
-typedef struct Sdp {
+typedef struct sdp_t {
 
   char content[SDP_CONTENT_LENGTH];
 
-} Sdp;
+} sdp_t;
 
-void sdp_append_h264(Sdp *sdp);
+void sdp_append_h264(sdp_t *sdp);
   
-void sdp_append_pcma(Sdp *sdp);
+void sdp_append_pcma(sdp_t *sdp);
   
-void sdp_append_datachannel(Sdp *sdp);
+void sdp_append_datachannel(sdp_t *sdp);
 
-void sdp_create(Sdp *sdp, int b_video, int b_audio, int b_datachannel);
+void sdp_create(sdp_t *sdp, int b_video, int b_audio, int b_datachannel);
 
-int sdp_append(Sdp *sdp, const char *format, ...);
+int sdp_append(sdp_t *sdp, const char *format, ...);
 
-void sdp_reset(Sdp *sdp);
+void sdp_reset(sdp_t *sdp);
 
 #endif // SDP_H_

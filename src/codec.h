@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-typedef enum MediaCodec {
+typedef enum {
 
   CODEC_NONE = 0,
 
@@ -18,7 +18,7 @@ typedef enum MediaCodec {
   CODEC_PCMA,
   CODEC_PCMU,
 
-} MediaCodec;
+} media_codec_t;
 
 #endif // CODEC_H_
 

@@ -94,110 +94,110 @@ uint32_t crc32c(uint32_t crc, const uint8_t *data, unsigned int length)
 
 static uint32_t sctp_get_checksum(sctp_t *sctp, const uint8_t *buf, size_t len) {
 
-  uint32_t crc = crc32c(0xffffffff, buf, len);
-  return crc;
+    uint32_t crc = crc32c(0xffffffff, buf, len);
+    return crc;
 }
 
 static int sctp_outgoing_data_cb(void *userdata, void *buf, size_t len, uint8_t tos, uint8_t set_df) {
 
-  sctp_t *sctp = (sctp_t*)userdata;
+    sctp_t *sctp = (sctp_t*)userdata;
 
-  dtls_srtp_write(sctp->dtls_srtp, buf, len);
+    dtls_srtp_write(sctp->dtls_srtp, buf, len);
 
-  return 0;
+    return 0;
 }
 
 int sctp_outgoing_data(sctp_t *sctp, char *buf, size_t len, sctp_data_ppid_t ppid) {
 
 #ifdef HAVE_USRSCTP
-  struct sctp_sendv_spa spa = {0};
+    struct sctp_sendv_spa spa = {0};
 
-  spa.sendv_flags = SCTP_SEND_SNDINFO_VALID;
+    spa.sendv_flags = SCTP_SEND_SNDINFO_VALID;
 
-  spa.sendv_sndinfo.snd_sid = 0;
-  spa.sendv_sndinfo.snd_flags = SCTP_EOR;
-  spa.sendv_sndinfo.snd_ppid = htonl(ppid);
+    spa.sendv_sndinfo.snd_sid = 0;
+    spa.sendv_sndinfo.snd_flags = SCTP_EOR;
+    spa.sendv_sndinfo.snd_ppid = htonl(ppid);
 
-  if(usrsctp_sendv(sctp->sock, buf, len, NULL, 0, &spa, sizeof(spa), SCTP_SENDV_SPA, 0) < 0) {
-    JLOG_ERROR("sctp sendv error");
-    return -1;
-  }
+    if(usrsctp_sendv(sctp->sock, buf, len, NULL, 0, &spa, sizeof(spa), SCTP_SENDV_SPA, 0) < 0) {
+        JLOG_ERROR("sctp sendv error");
+        return -1;
+    }
 #else
-  size_t padding_len = 0;
-  size_t payload_max = SCTP_MTU - sizeof(sctp_packet_t) - sizeof(sctp_data_chunk_t);
-  size_t pos = 0;
-  static uint16_t sqn = 0;
+    size_t padding_len = 0;
+    size_t payload_max = SCTP_MTU - sizeof(sctp_packet_t) - sizeof(sctp_data_chunk_t);
+    size_t pos = 0;
+    static uint16_t sqn = 0;
 
-  sctp_packet_t *packet = (sctp_packet_t *)(sctp->buf);
-  sctp_data_chunk_t *chunk = (sctp_data_chunk_t *)(packet->chunks);
+    sctp_packet_t *packet = (sctp_packet_t *)(sctp->buf);
+    sctp_data_chunk_t *chunk = (sctp_data_chunk_t *)(packet->chunks);
 
-  packet->header.source_port = htons(sctp->local_port);
-  packet->header.destination_port = htons(sctp->remote_port);
-  packet->header.verification_tag = sctp->verification_tag;
+    packet->header.source_port = htons(sctp->local_port);
+    packet->header.destination_port = htons(sctp->remote_port);
+    packet->header.verification_tag = sctp->verification_tag;
 
-  chunk->type = SCTP_DATA;
-  chunk->iube = 0x06;
-  chunk->si = htons(0);
-  chunk->sqn = htons(sqn++);
-  chunk->ppid = htonl(ppid);
+    chunk->type = SCTP_DATA;
+    chunk->iube = 0x06;
+    chunk->si = htons(0);
+    chunk->sqn = htons(sqn++);
+    chunk->ppid = htonl(ppid);
 
-  while (len > payload_max) {
+    while (len > payload_max) {
 
-    chunk->length = htons(payload_max + sizeof(sctp_data_chunk_t));
-    chunk->tsn = htonl(sctp->tsn++);
-    memcpy(chunk->data, buf + pos, payload_max);
-    packet->header.checksum = 0;
+        chunk->length = htons(payload_max + sizeof(sctp_data_chunk_t));
+        chunk->tsn = htonl(sctp->tsn++);
+        memcpy(chunk->data, buf + pos, payload_max);
+        packet->header.checksum = 0;
 
-    packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t*)sctp->buf, SCTP_MTU);
+        packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t*)sctp->buf, SCTP_MTU);
 
-    sctp_outgoing_data_cb(sctp, sctp->buf, SCTP_MTU, 0, 0);
-    chunk->iube = 0x04;
-    len -= payload_max;
-    pos += payload_max;
-  }
+        sctp_outgoing_data_cb(sctp, sctp->buf, SCTP_MTU, 0, 0);
+        chunk->iube = 0x04;
+        len -= payload_max;
+        pos += payload_max;
+    }
 
-  if (len > 0) {
+    if (len > 0) {
 
-    chunk->length = htons(len + sizeof(sctp_data_chunk_t));
-    chunk->iube++;
-    chunk->tsn = htonl(sctp->tsn++);
-    memset(chunk->data, 0, payload_max);
-    memcpy(chunk->data, buf + pos, len);
-    packet->header.checksum = 0;
-    
-    padding_len = 4 * ((len + sizeof(sctp_data_chunk_t) + sizeof(sctp_packet_t) + 3) / 4);
+        chunk->length = htons(len + sizeof(sctp_data_chunk_t));
+        chunk->iube++;
+        chunk->tsn = htonl(sctp->tsn++);
+        memset(chunk->data, 0, payload_max);
+        memcpy(chunk->data, buf + pos, len);
+        packet->header.checksum = 0;
+        
+        padding_len = 4 * ((len + sizeof(sctp_data_chunk_t) + sizeof(sctp_packet_t) + 3) / 4);
 
-    packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t*)sctp->buf, padding_len);
+        packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t*)sctp->buf, padding_len);
 
-    sctp_outgoing_data_cb(sctp, sctp->buf, padding_len, 0, 0);
-  }
+        sctp_outgoing_data_cb(sctp, sctp->buf, padding_len, 0, 0);
+    }
 #endif
-  return len;
+    return len;
 }
 
 void sctp_incoming_data(sctp_t *sctp, char *buf, size_t len) {
 
-  if(!sctp)
-    return;
+    if(!sctp)
+        return;
 
 #ifdef HAVE_USRSCTP
-  usrsctp_conninput(sctp, buf, len, 0);
+    usrsctp_conninput(sctp, buf, len, 0);
 #else
 
-  size_t length = 0;
-  size_t pos = sizeof(sctp_header_t);
-  sctp_chunk_common_t *chunk_common;
-  sctp_data_chunk_t *data_chunk;
-  sctp_sack_chunk_t *sack;
-  sctp_packet_t *in_packet = (sctp_packet_t*)buf;
-  sctp_packet_t *out_packet = (sctp_packet_t*)sctp->buf;
+    size_t length = 0;
+    size_t pos = sizeof(sctp_header_t);
+    sctp_chunk_common_t *chunk_common;
+    sctp_data_chunk_t *data_chunk;
+    sctp_sack_chunk_t *sack;
+    sctp_packet_t *in_packet = (sctp_packet_t*)buf;
+    sctp_packet_t *out_packet = (sctp_packet_t*)sctp->buf;
 
-  // Header
+    // Header
 #if 0
-  JLOG_DEBUG("source_port %d", ntohs(in_packet->header.source_port));
-  JLOG_DEBUG("destination_port %d", ntohs(in_packet->header.destination_port));
-  JLOG_DEBUG("verification_tag %ld", ntohl(in_packet->header.verification_tag));
-  JLOG_DEBUG("checksum %d", ntohs(in_packet->header.checksum));
+    JLOG_DEBUG("source_port %d", ntohs(in_packet->header.source_port));
+    JLOG_DEBUG("destination_port %d", ntohs(in_packet->header.destination_port));
+    JLOG_DEBUG("verification_tag %ld", ntohl(in_packet->header.verification_tag));
+    JLOG_DEBUG("checksum %d", ntohs(in_packet->header.checksum));
 #endif
   uint32_t crc32c = in_packet->header.checksum;
 
