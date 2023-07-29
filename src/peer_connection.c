@@ -140,7 +140,7 @@ static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user
 	// 	return;
 
 	JLOG_INFO("%s candidate: %s", pc->name, sdp);
-
+    sdp_append(&pc->local_sdp, sdp);
 	// Agent: Receive it from agent
 	// juice_add_remote_candidate(agent, sdp);
 }
@@ -148,8 +148,8 @@ static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user
 // Agent: on local candidates gathering done
 static void agent_on_gathering_done(juice_agent_t *agent, void *user_ptr) {
     peer_connection_t *pc = user_ptr;
-    juice_get_local_description(pc->juice_agent, pc->local_sdp, JUICE_MAX_SDP_STRING_LEN);
-    JLOG_INFO("%s gathering done:\n%s\n", pc->name, pc->local_sdp);
+    // juice_get_local_description(pc->juice_agent, pc->local_sdp.content, JUICE_MAX_SDP_STRING_LEN);
+    JLOG_INFO("%s gathering done:\n%s\n", pc->name, pc->local_sdp.content);
 	juice_set_remote_gathering_done(agent); // optional
 }
 
@@ -227,6 +227,9 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->name = name;
     pc->role = role;
     pc->stack_size = 100*1024;
+    pc->options.video_codec = CODEC_NONE;
+    pc->options.audio_codec = CODEC_NONE;
+    pc->options.datachannel = 1;
 }
 
 
@@ -236,60 +239,68 @@ static void peer_connection_loop_run(peer_connection_t *pc) {
 
 static void peer_connection_state_start(peer_connection_t *pc) {
 
-  // int b_video = pc->options.video_codec != CODEC_NONE;
-  // int b_audio = pc->options.audio_codec != CODEC_NONE;
-  // int b_datachannel = pc->options.datachannel;
-  // char *description = (char*)pc->temp_buf;
-
-  // memset(pc->temp_buf, 0, sizeof(pc->temp_buf));
+  int b_video = pc->options.video_codec != CODEC_NONE;
+  int b_audio = pc->options.audio_codec != CODEC_NONE;
+  int b_datachannel = pc->options.datachannel;
+  char description[SDP_CONTENT_LENGTH];
+  memset(description, '\0', SDP_CONTENT_LENGTH);
 
   // agent_reset(pc->juice_agent);
 
     dtls_srtp_reset_session(&pc->dtls_srtp);
 
-  // pc->sctp.connected = 0;
+    pc->sctp.connected = 0;
 
-	juice_get_local_description(pc->juice_agent, pc->local_sdp, JUICE_MAX_SDP_STRING_LEN);
-	JLOG_INFO("%s local description:\n%s\n", pc->name, pc->local_sdp);
-  
 	juice_gather_candidates(pc->juice_agent);
+	juice_get_local_description(pc->juice_agent, description, SDP_CONTENT_LENGTH);
+	JLOG_INFO("%s local description:\n%s\n", pc->name, description);
+
+    sdp_reset(&pc->local_sdp);
+    // // TODO: check if we have video or audio codecs
+    sdp_create(&pc->local_sdp, b_video, b_audio, b_datachannel);
+
+    if (pc->options.video_codec == CODEC_H264) {
+
+        sdp_append_h264(&pc->local_sdp);
+        sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
+        if (pc->role == DTLS_SRTP_ROLE_SERVER) {
+            sdp_append(&pc->local_sdp, "a=setup:actpass");
+        } else {
+            sdp_append(&pc->local_sdp, "a=setup:active");
+        }
+        strcat(pc->local_sdp.content, description);
+    }
+
+    if (pc->options.audio_codec == CODEC_PCMA) {
+
+        sdp_append_pcma(&pc->local_sdp);
+        sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
+        if (pc->role == DTLS_SRTP_ROLE_SERVER) {
+            sdp_append(&pc->local_sdp, "a=setup:actpass");
+        } else {
+            sdp_append(&pc->local_sdp, "a=setup:active");
+        }
+        strcat(pc->local_sdp.content, description);
+    }
+
+    if (pc->options.datachannel) {
+        sdp_append_datachannel(&pc->local_sdp);
+        sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
+        if (pc->role == DTLS_SRTP_ROLE_SERVER) {
+            sdp_append(&pc->local_sdp, "a=setup:actpass");
+        } else {
+            sdp_append(&pc->local_sdp, "a=setup:active");
+        }
+        strcat(pc->local_sdp.content, description);
+    }
+
+    pc->b_offer_created = 1;
+
+    if (pc->cb_candidate) {
+        pc->cb_candidate(pc->local_sdp.content, pc->user_data);
+    }
+    
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
-  // agent_gather_candidates(pc->juice_agent);
-
-  // agent_get_local_description(pc->juice_agent, description, sizeof(pc->temp_buf));
-
-  // memset(&pc->local_sdp, 0, sizeof(pc->local_sdp));
-  // // TODO: check if we have video or audio codecs
-  // sdp_create(&pc->local_sdp, b_video, b_audio, b_datachannel);
-
-  // if (pc->options.video_codec == CODEC_H264) {
-
-  //   sdp_append_h264(&pc->local_sdp);
-  //   sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
-  //   sdp_append(&pc->local_sdp, "a=setup:actpass");
-  //   strcat(pc->local_sdp.content, description);
-  // }
-
-  // if (pc->options.audio_codec == CODEC_PCMA) {
-
-  //   sdp_append_pcma(&pc->local_sdp);
-  //   sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
-  //   sdp_append(&pc->local_sdp, "a=setup:actpass");
-  //   strcat(pc->local_sdp.content, description);
-  // }
-
-  // if (pc->options.datachannel) {
-  //   sdp_append_datachannel(&pc->local_sdp);
-  //   sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
-  //   sdp_append(&pc->local_sdp, "a=setup:actpass");
-  //   strcat(pc->local_sdp.content, description);
-  // }
-
-  // pc->b_offer_created = 1;
-
-  // if (pc->onicecandidate) {
-  //   pc->onicecandidate(pc->local_sdp.content, pc->user_data);
-  // }
 }
 
 void peer_connection_loop(void *param) {

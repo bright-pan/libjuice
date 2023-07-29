@@ -9,13 +9,13 @@
 extern "C" {
 #endif
 
-// #include "sctp.h"
+#include "sctp.h"
 #include "juice.h"
 #include "agent.h"
 #include "dtls_srtp.h"
 #include "packet.h"
-// #include "sdp.h"
-// #include "codec.h"
+#include "sdp.h"
+#include "codec.h"
 // #include "config.h"
 // #include "rtp.h"
 // #include "rtcp_packet.h"
@@ -37,9 +37,9 @@ typedef enum peer_connection_state {
 
 typedef struct peer_options {
 	juice_config_t juice_config;
-  // MediaCodec audio_codec;
-  // MediaCodec video_codec;
-  int data_channel;
+    media_codec_t audio_codec;
+    media_codec_t video_codec;
+    int datachannel;
   
 #ifdef HAVE_GST
   const char *audio_outgoing_pipeline;
@@ -61,10 +61,10 @@ typedef struct peer_connect {
     juice_state_t juice_state;
 	ice_candidate_t local_cand, remote_cand;
     dtls_srtp_t dtls_srtp;
-    // Sctp sctp;
+    sctp_t sctp;
 
-    char local_sdp[JUICE_MAX_SDP_STRING_LEN];
-    char remote_sdp[JUICE_MAX_SDP_STRING_LEN];
+    sdp_t local_sdp;
+    sdp_t remote_sdp;
 
     void (*cb_candidate)(char *sdp, void *user_data);
     void (*cb_state_change)(peer_connection_state_t state, void *user_data);
@@ -80,7 +80,7 @@ typedef struct peer_connect {
     packet_fifo_t other_fifo;
     // uint8_t agent_buf[CONFIG_MTU];
     // int agent_ret;
-    // int b_offer_created;
+    int b_offer_created;
 
     // Buffer *audio_rb[2];
     // Buffer *video_rb[2];

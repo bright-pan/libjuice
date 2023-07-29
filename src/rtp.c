@@ -159,55 +159,55 @@ static int rtp_packetizer_encode_h264(rtp_packetizer_t *rtp_packetizer, uint8_t 
 
 static int rtp_packetizer_encode_generic(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
 
-  rtp_header_t *rtp_header = (rtp_header_t*)rtp_packetizer->buf;
-  rtp_header->version = 2;
-  rtp_header->padding = 0;
-  rtp_header->extension = 0;
-  rtp_header->csrccount = 0;
-  rtp_header->markerbit = 0;
-  rtp_header->type = rtp_packetizer->type;
-  rtp_header->seq_number = htons(rtp_packetizer->seq_number++);
-  rtp_packetizer->timestamp += size; // 8000 HZ.
-  rtp_header->timestamp = htonl(rtp_packetizer->timestamp);
-  rtp_header->ssrc = htonl(rtp_packetizer->ssrc);
-  memcpy(rtp_packetizer->buf + sizeof(rtp_header_t), buf, size);
+    rtp_header_t *rtp_header = (rtp_header_t*)rtp_packetizer->buf;
+    rtp_header->version = 2;
+    rtp_header->padding = 0;
+    rtp_header->extension = 0;
+    rtp_header->csrccount = 0;
+    rtp_header->markerbit = 0;
+    rtp_header->type = rtp_packetizer->type;
+    rtp_header->seq_number = htons(rtp_packetizer->seq_number++);
+    rtp_packetizer->timestamp += size; // 8000 HZ.
+    rtp_header->timestamp = htonl(rtp_packetizer->timestamp);
+    rtp_header->ssrc = htonl(rtp_packetizer->ssrc);
+    memcpy(rtp_packetizer->buf + sizeof(rtp_header_t), buf, size);
 
-  rtp_packetizer->on_packet(rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
-  
-  return 0;
+    rtp_packetizer->on_packet(rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
+    
+    return 0;
 }
 
 void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data), void *user_data) {
 
-  rtp_packetizer->on_packet = on_packet;
-  rtp_packetizer->user_data = user_data;
-  rtp_packetizer->timestamp = 0;
-  rtp_packetizer->seq_number = 0;
+    rtp_packetizer->on_packet = on_packet;
+    rtp_packetizer->user_data = user_data;
+    rtp_packetizer->timestamp = 0;
+    rtp_packetizer->seq_number = 0;
 
-  switch (codec) {
+    switch (codec) {
 
-    case CODEC_H264:
-        rtp_packetizer->type = PT_H264;
-        rtp_packetizer->ssrc = SSRC_H264;
-        rtp_packetizer->encode_func = rtp_packetizer_encode_h264;
+        case CODEC_H264:
+            rtp_packetizer->type = PT_H264;
+            rtp_packetizer->ssrc = SSRC_H264;
+            rtp_packetizer->encode_func = rtp_packetizer_encode_h264;
+            break;
+        case CODEC_PCMA:
+            rtp_packetizer->type = PT_PCMA;
+            rtp_packetizer->ssrc = SSRC_PCMA;
+            rtp_packetizer->encode_func = rtp_packetizer_encode_generic;
+            break;
+        case CODEC_PCMU:
+            rtp_packetizer->type = PT_PCMU;
+            rtp_packetizer->ssrc = SSRC_PCMU;
+            rtp_packetizer->encode_func = rtp_packetizer_encode_generic;
+            break;
+        default:
         break;
-    case CODEC_PCMA:
-        rtp_packetizer->type = PT_PCMA;
-        rtp_packetizer->ssrc = SSRC_PCMA;
-        rtp_packetizer->encode_func = rtp_packetizer_encode_generic;
-        break;
-    case CODEC_PCMU:
-        rtp_packetizer->type = PT_PCMU;
-        rtp_packetizer->ssrc = SSRC_PCMU;
-        rtp_packetizer->encode_func = rtp_packetizer_encode_generic;
-        break;
-    default:
-      break;
-  }
+    }
 }
 
 int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
 
-  return rtp_packetizer->encode_func(rtp_packetizer, buf, size);
+    return rtp_packetizer->encode_func(rtp_packetizer, buf, size);
 }
 

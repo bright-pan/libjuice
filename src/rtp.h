@@ -6,61 +6,60 @@
 #include "codec.h"
 #include "config.h"
 
-
 typedef enum {
 
-  PT_PCMU = 0,
-  PT_PCMA = 8,
-  PT_G722 = 9,
-  PT_H264 = 96,
-  PT_OPUS = 111
+    PT_PCMU = 0,
+    PT_PCMA = 8,
+    PT_G722 = 9,
+    PT_H264 = 96,
+    PT_OPUS = 111
 
 } rtp_payload_type_t;
 
 typedef enum {
 
-  SSRC_H264 = 1,
-  SSRC_PCMA = 4,
-  SSRC_PCMU = 5,
-  SSRC_OPUS = 6,
+    SSRC_H264 = 1,
+    SSRC_PCMA = 4,
+    SSRC_PCMU = 5,
+    SSRC_OPUS = 6,
 
 } rtp_ssrc_type_t;
 
 typedef struct {
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-  uint16_t version:2;
-  uint16_t padding:1;
-  uint16_t extension:1;
-  uint16_t csrccount:4;
-  uint16_t markerbit:1;
-  uint16_t type:7;
+    uint16_t version : 2;
+    uint16_t padding : 1;
+    uint16_t extension : 1;
+    uint16_t csrccount : 4;
+    uint16_t markerbit : 1;
+    uint16_t type : 7;
 #elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-  uint16_t csrccount:4;
-  uint16_t extension:1;
-  uint16_t padding:1;
-  uint16_t version:2;
-  uint16_t type:7;
-  uint16_t markerbit:1;
+    uint16_t csrccount : 4;
+    uint16_t extension : 1;
+    uint16_t padding : 1;
+    uint16_t version : 2;
+    uint16_t type : 7;
+    uint16_t markerbit : 1;
 #endif
-  uint16_t seq_number;
-  uint32_t timestamp;
-  uint32_t ssrc;
-  uint32_t csrc[0];
+    uint16_t seq_number;
+    uint32_t timestamp;
+    uint32_t ssrc;
+    uint32_t csrc[0];
 
 } rtp_header_t;
 
 typedef struct {
 
-  rtp_header_t header;
-  uint8_t payload[0];
+    rtp_header_t header;
+    uint8_t payload[0];
 
 } rtp_packet_t;
 
 typedef struct {
 
-  int pt_h264;
-  int pt_opus;
-  int pt_pcma;
+    int pt_h264;
+    int pt_opus;
+    int pt_pcma;
 
 } rtp_map_t;
 
@@ -68,21 +67,22 @@ typedef struct rtp_packetizer rtp_packetizer_t;
 
 struct rtp_packetizer {
 
-  rtp_payload_type_t type;
-  void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data);
-  int (*encode_func)(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size);
-  void *user_data;
-  uint16_t seq_number;
-  uint32_t ssrc;
-  uint32_t timestamp;
-  uint8_t buf[CONFIG_MTU + 1];
+    rtp_payload_type_t type;
+    void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data);
+    int (*encode_func)(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size);
+    void *user_data;
+    uint16_t seq_number;
+    uint32_t ssrc;
+    uint32_t timestamp;
+    uint8_t buf[CONFIG_MTU + 1];
 };
 
 int rtp_packet_validate(uint8_t *packet, size_t size);
 
-void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data), void *user_data);
+void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec,
+                         void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data),
+                         void *user_data);
 
 int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size);
-
 
 #endif // RTP_H_

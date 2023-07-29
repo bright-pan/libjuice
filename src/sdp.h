@@ -2,13 +2,14 @@
 #define SDP_H_
 
 #include <string.h>
+#include "juice.h"
 
-#define SDP_CONTENT_LENGTH 10240
+#define SDP_CONTENT_LENGTH JUICE_MAX_SDP_STRING_LEN
 #define SDP_ATTR_LENGTH 128
 
 typedef struct sdp_t {
 
-  char content[SDP_CONTENT_LENGTH];
+    char content[SDP_CONTENT_LENGTH];
 
 } sdp_t;
 

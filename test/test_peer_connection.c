@@ -2,16 +2,19 @@
 #include "peer_connection.h"
 #include "udp.h"
 #include "log.h"
+#include <cJSON.h>
 
 #if defined(AOS_COMP_CLI)
 #include <aos/cli.h>
 #include <aos/kernel.h>
 
+
+extern void mqtt_offer_publish(char *offer);
+
 char buffer[BUFFER_SIZE];
 
 peer_connection_t peer_connection_server, peer_connection_client;
 peer_options_t server_options, client_options;
-
 
 static void on_state_change(peer_connection_state_t state, void *data) {
 
@@ -33,19 +36,33 @@ static void pc_client(int argc, char **argv) {
         peer_connection_init(pc);
     } else if (strstr(argv[1], "start")) {
             peer_connection_start(pc);
-   } else if (strstr(argv[1], "remote")) {
+    } else if (strstr(argv[1], "remote")) {
         if (argc == 2) {
-            juice_set_remote_description(pc->juice_agent, peer_connection_server.local_sdp);
+            juice_set_remote_description(pc->juice_agent, peer_connection_server.local_sdp.content);
         } else {
-            JLOG_ERROR("Usage: %s remote\n", argv[0]);
+            JLOG_ERROR("Usage: %s remote", argv[0]);
+        }
+   } else if (strstr(argv[1], "push")) {
+        cJSON *push = cJSON_CreateObject();  
+        cJSON_AddStringToObject(push, "sdp", pc->local_sdp.content);
+        if (strstr(argv[2], "offer")) {
+            // create offer
+            cJSON_AddStringToObject(push, "type", "offer");
+            mqtt_offer_publish(cJSON_Print(push));
+        } else if (strstr(argv[2], "answer")) {
+            // create answer
+            cJSON_AddStringToObject(push, "type", "answer");
+            mqtt_offer_publish(cJSON_Print(push));
+        } else {
+            JLOG_ERROR("Usage: %s push offer|answer\n", argv[0]);
         }
    } else if (strstr(argv[1], "get")) {
         if (strstr(argv[2], "local")) {
-            juice_get_local_description(pc->juice_agent, pc->local_sdp, JUICE_MAX_SDP_STRING_LEN);
-            JLOG_INFO("client local description:\n%s\n", pc->local_sdp);
+            // juice_get_local_description(pc->juice_agent, pc->local_sdp.content, JUICE_MAX_SDP_STRING_LEN);
+            JLOG_INFO("client local description:\n%s\n", pc->local_sdp.content);
         } else if (strstr(argv[2], "remote")) {
-            juice_get_remote_description(pc->juice_agent, pc->remote_sdp, JUICE_MAX_SDP_STRING_LEN);
-            JLOG_INFO("client remote description:\n%s\n", pc->remote_sdp);
+            juice_get_remote_description(pc->juice_agent, pc->remote_sdp.content, JUICE_MAX_SDP_STRING_LEN);
+            JLOG_INFO("client remote description:\n%s\n", pc->remote_sdp.content);
         } else {
             JLOG_ERROR("Usage: %s get local|remote\n", argv[0]);
         }
@@ -135,17 +152,31 @@ static void pc_server(int argc, char **argv) {
             peer_connection_start(pc);
     } else if (strstr(argv[1], "remote")) {
         if (argc == 2) {
-            juice_set_remote_description(pc->juice_agent, peer_connection_client.local_sdp);
+            juice_set_remote_description(pc->juice_agent, peer_connection_client.local_sdp.content);
         } else {
             JLOG_ERROR("Usage: %s remote", argv[0]);
         }
+   } else if (strstr(argv[1], "push")) {
+        cJSON *push = cJSON_CreateObject();  
+        cJSON_AddStringToObject(push, "sdp", pc->local_sdp.content);
+        if (strstr(argv[2], "offer")) {
+            // create offer
+            cJSON_AddStringToObject(push, "type", "offer");
+            mqtt_offer_publish(cJSON_Print(push));
+        } else if (strstr(argv[2], "answer")) {
+            // create answer
+            cJSON_AddStringToObject(push, "type", "answer");
+            mqtt_offer_publish(cJSON_Print(push));
+        } else {
+            JLOG_ERROR("Usage: %s push offer|answer\n", argv[0]);
+        }
     } else if (strstr(argv[1], "get")) {
         if (strstr(argv[2], "local")) {
-            juice_get_local_description(pc->juice_agent, pc->local_sdp, JUICE_MAX_SDP_STRING_LEN);
-            JLOG_INFO("server local description:\n%s\n", pc->local_sdp);
+            // juice_get_local_description(pc->juice_agent, pc->local_sdp.content, JUICE_MAX_SDP_STRING_LEN);
+            JLOG_INFO("server local description:\n%s\n", pc->local_sdp.content);
         } else if (strstr(argv[2], "remote")) {
-            juice_get_remote_description(pc->juice_agent, pc->remote_sdp, JUICE_MAX_SDP_STRING_LEN);
-            JLOG_INFO("server remote description:\n%s\n", pc->remote_sdp);
+            juice_get_remote_description(pc->juice_agent, pc->remote_sdp.content, JUICE_MAX_SDP_STRING_LEN);
+            JLOG_INFO("server remote description:\n%s\n", pc->remote_sdp.content);
         } else {
             JLOG_ERROR("Usage: %s get local|remote\n", argv[0]);
         }
