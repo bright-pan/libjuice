@@ -71,8 +71,8 @@ static int dtls_srtp_cert_verify(void *data, mbedtls_x509_crt *crt, int depth, u
     *flags &= ~(MBEDTLS_X509_BADCERT_NOT_TRUSTED | MBEDTLS_X509_BADCERT_CN_MISMATCH);
     return 0;
 }
-
-static int dtls_srtp_selfsign_cert(dtls_srtp_t *dtls_srtp) {
+/*
+static int dtls_srtp_selfsign_cert_with_rsa(dtls_srtp_t *dtls_srtp) {
 
     int ret;
 
@@ -134,6 +134,82 @@ static int dtls_srtp_selfsign_cert(dtls_srtp_t *dtls_srtp) {
 
     return ret;
 }
+*/
+
+static int dtls_srtp_selfsign_cert_with_ecdsa(dtls_srtp_t *dtls_srtp) {
+
+    int ret;
+
+    mbedtls_x509write_cert crt;
+
+    mbedtls_mpi serial;
+
+    unsigned char *cert_buf = (unsigned char *)malloc(RSA_KEY_LENGTH * 2);
+    // memset(cert_buf, 0, RSA_KEY_LENGTH * 2);
+    const char *pers = "dtls_srtp";
+
+    mbedtls_ctr_drbg_seed(&dtls_srtp->ctr_drbg, mbedtls_entropy_func, &dtls_srtp->entropy,
+                          (const unsigned char *)pers, strlen(pers));
+
+    ret = mbedtls_pk_setup(&dtls_srtp->pkey, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
+
+    if (ret < 0) {
+
+        JLOG_DEBUG("mbedtls_pk_setup failed, ret=%d\n", ret);
+    }
+
+    ret = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, mbedtls_pk_ec(dtls_srtp->pkey), mbedtls_ctr_drbg_random, &dtls_srtp->ctr_drbg);
+
+    if (ret < 0) {
+
+        JLOG_DEBUG("mbedtls_ecp_gen_key failed, ret=%d\n", ret);
+    }
+
+    // mbedtls_pk_write_key_pem(&dtls_srtp->pkey, cert_buf, RSA_KEY_LENGTH * 2);
+
+    // JLOG_INFO("%s", cert_buf);
+    mbedtls_x509write_crt_init(&crt);
+
+    mbedtls_x509write_crt_set_subject_key(&crt, &dtls_srtp->pkey);
+
+    mbedtls_x509write_crt_set_version(&crt, MBEDTLS_X509_CRT_VERSION_3);
+
+    mbedtls_x509write_crt_set_md_alg(&crt, MBEDTLS_MD_SHA256);
+
+    mbedtls_x509write_crt_set_subject_key(&crt, &dtls_srtp->pkey);
+
+    mbedtls_x509write_crt_set_issuer_key(&crt, &dtls_srtp->pkey);
+
+    mbedtls_x509write_crt_set_subject_name(&crt, "CN=dtls_srtp");
+
+    mbedtls_x509write_crt_set_issuer_name(&crt, "CN=dtls_srtp");
+
+    mbedtls_mpi_init(&serial);
+
+    mbedtls_mpi_fill_random(&serial, 16, mbedtls_ctr_drbg_random, &dtls_srtp->ctr_drbg);
+
+    mbedtls_x509write_crt_set_serial(&crt, &serial);
+
+    mbedtls_x509write_crt_set_validity(&crt, "20180101000000", "20280101000000");
+
+    ret = mbedtls_x509write_crt_pem(&crt, cert_buf, 2 * RSA_KEY_LENGTH, mbedtls_ctr_drbg_random,
+                                    &dtls_srtp->ctr_drbg);
+
+    if (ret < 0) {
+
+        JLOG_DEBUG("mbedtls_x509write_crt_pem failed, ret=%d\n", ret);
+    }
+
+    mbedtls_x509_crt_parse(&dtls_srtp->cert, cert_buf, 2 * RSA_KEY_LENGTH);
+    // JLOG_INFO("%s", cert_buf);
+    mbedtls_x509write_crt_free(&crt);
+
+    mbedtls_mpi_free(&serial);
+
+    free(cert_buf);
+
+    return ret;
+}
 
 void dtls_srtp_ssl_dbg_init(dtls_srtp_t *dtls_srtp, int enable, int level) {
     JLOG_DEBUG("init ssl debug: %s, level=%d", enable ? "on": "off", level);
@@ -178,7 +254,7 @@ int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_dat
     mbedtls_entropy_init(&dtls_srtp->entropy);
     mbedtls_ctr_drbg_init(&dtls_srtp->ctr_drbg);
 
-    dtls_srtp_selfsign_cert(dtls_srtp);
+    dtls_srtp_selfsign_cert_with_ecdsa(dtls_srtp);
 
 #if defined(CONFIG_LIBJUICE_USE_MBEDTLS) && defined(MBEDTLS_DEBUG_C)
     if (dtls_srtp->ssl_debug_enable && dtls_srtp->role == DTLS_SRTP_ROLE_CLIENT) {
