@@ -137,7 +137,7 @@ int ice_parse_sdp(const char *sdp, ice_description_t *description) {
 
 int ice_parse_candidate_sdp(const char *line, ice_candidate_t *candidate) {
 	const char *arg;
-	if (match_prefix(line, "a=candidate:", &arg)) {
+	if (match_prefix(line, "a=candidate:", &arg) || match_prefix(line, "candidate:", &arg)) {
 		int ret = parse_sdp_candidate(line, candidate);
 		if (ret < 0)
 			return ret;

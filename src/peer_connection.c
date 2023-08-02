@@ -132,6 +132,7 @@ static void agent_on_state_changed(juice_agent_t *agent, juice_state_t state, vo
     }
 }
 
+extern void mqtt_candidate_publish(char *sdp_content);
 // Agent: on local candidate gathered
 static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user_ptr) {
     peer_connection_t *pc = user_ptr;
@@ -140,7 +141,9 @@ static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user
 	// 	return;
 
 	JLOG_INFO("%s candidate: %s", pc->name, sdp);
-    sdp_append(&pc->local_sdp, sdp);
+
+    mqtt_candidate_publish((char *)&sdp[2]);
+    // sdp_append(&pc->local_sdp, sdp);
 	// Agent: Receive it from agent
 	// juice_add_remote_candidate(agent, sdp);
 }
@@ -237,13 +240,15 @@ static void peer_connection_loop_run(peer_connection_t *pc) {
     aos_task_new(pc->name, pc->loop, pc, pc->stack_size);
 }
 
+extern void mqtt_answer_publish(char *sdp_content);
+
 static void peer_connection_state_start(peer_connection_t *pc) {
 
-  int b_video = pc->options.video_codec != CODEC_NONE;
-  int b_audio = pc->options.audio_codec != CODEC_NONE;
-  int b_datachannel = pc->options.datachannel;
-  char description[SDP_CONTENT_LENGTH];
-  memset(description, '\0', SDP_CONTENT_LENGTH);
+    int b_video = pc->options.video_codec != CODEC_NONE;
+    int b_audio = pc->options.audio_codec != CODEC_NONE;
+    int b_datachannel = pc->options.datachannel;
+    char description[SDP_CONTENT_LENGTH];
+    memset(description, '\0', SDP_CONTENT_LENGTH);
 
   // agent_reset(pc->juice_agent);
 
@@ -253,7 +258,6 @@ static void peer_connection_state_start(peer_connection_t *pc) {
 
 	juice_gather_candidates(pc->juice_agent);
 	juice_get_local_description(pc->juice_agent, description, SDP_CONTENT_LENGTH);
-	JLOG_INFO("%s local description:\n%s\n", pc->name, description);
 
     sdp_reset(&pc->local_sdp);
     // // TODO: check if we have video or audio codecs
@@ -293,13 +297,18 @@ static void peer_connection_state_start(peer_connection_t *pc) {
         }
         strcat(pc->local_sdp.content, description);
     }
-
+    
+	JLOG_INFO("%s local description:\n%s\n", pc->name, pc->local_sdp.content);
+    mqtt_answer_publish(pc->local_sdp.content);
     pc->b_offer_created = 1;
 
     if (pc->cb_candidate) {
         pc->cb_candidate(pc->local_sdp.content, pc->user_data);
     }
-    
+                    
+    packet_fifo_reset(&pc->dtls_fifo);
+    packet_fifo_reset(&pc->other_fifo);
+    packet_fifo_reset(&pc->rtp_fifo);
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }
 
@@ -346,9 +355,6 @@ void peer_connection_loop(void *param) {
 
             case PEER_CONNECTION_HANDSHAKE:
             if (pc->dtls_srtp.state == DTLS_SRTP_STATE_INIT) {
-                packet_fifo_reset(&pc->dtls_fifo);
-                packet_fifo_reset(&pc->other_fifo);
-                packet_fifo_reset(&pc->rtp_fifo);
                 //juice_suspend(pc->juice_agent);
                 JLOG_INFO("DTLS-SRTP %s handshake start", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
                 if (dtls_srtp_handshake(&pc->dtls_srtp, &pc->remote_cand.resolved) == 0) {

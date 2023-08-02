@@ -65,6 +65,7 @@ typedef struct peer_connect {
 
     sdp_t local_sdp;
     sdp_t remote_sdp;
+    // char description[SDP_CONTENT_LENGTH];
 
     void (*cb_candidate)(char *sdp, void *user_data);
     void (*cb_state_change)(peer_connection_state_t state, void *user_data);

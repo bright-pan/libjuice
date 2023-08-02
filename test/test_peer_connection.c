@@ -9,7 +9,8 @@
 #include <aos/kernel.h>
 
 
-extern void mqtt_offer_publish(char *offer);
+extern void mqtt_offer_publish(char *sdp_content);
+extern void mqtt_answer_publish(char *sdp_content);
 
 char buffer[BUFFER_SIZE];
 
@@ -43,16 +44,10 @@ static void pc_client(int argc, char **argv) {
             JLOG_ERROR("Usage: %s remote", argv[0]);
         }
    } else if (strstr(argv[1], "push")) {
-        cJSON *push = cJSON_CreateObject();  
-        cJSON_AddStringToObject(push, "sdp", pc->local_sdp.content);
         if (strstr(argv[2], "offer")) {
-            // create offer
-            cJSON_AddStringToObject(push, "type", "offer");
-            mqtt_offer_publish(cJSON_Print(push));
+            mqtt_offer_publish(pc->local_sdp.content);
         } else if (strstr(argv[2], "answer")) {
-            // create answer
-            cJSON_AddStringToObject(push, "type", "answer");
-            mqtt_offer_publish(cJSON_Print(push));
+            mqtt_answer_publish(pc->local_sdp.content);
         } else {
             JLOG_ERROR("Usage: %s push offer|answer\n", argv[0]);
         }
@@ -157,16 +152,10 @@ static void pc_server(int argc, char **argv) {
             JLOG_ERROR("Usage: %s remote", argv[0]);
         }
    } else if (strstr(argv[1], "push")) {
-        cJSON *push = cJSON_CreateObject();  
-        cJSON_AddStringToObject(push, "sdp", pc->local_sdp.content);
         if (strstr(argv[2], "offer")) {
-            // create offer
-            cJSON_AddStringToObject(push, "type", "offer");
-            mqtt_offer_publish(cJSON_Print(push));
+            mqtt_offer_publish(pc->local_sdp.content);
         } else if (strstr(argv[2], "answer")) {
-            // create answer
-            cJSON_AddStringToObject(push, "type", "answer");
-            mqtt_offer_publish(cJSON_Print(push));
+            mqtt_answer_publish(pc->local_sdp.content);
         } else {
             JLOG_ERROR("Usage: %s push offer|answer\n", argv[0]);
         }

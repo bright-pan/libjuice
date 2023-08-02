@@ -42,11 +42,33 @@ extern peer_connection_t peer_connection_server, peer_connection_client;
 
 peer_connection_t *pc = &peer_connection_client;
 
+void mqtt_offer_publish(char *sdp_content) {
+    cJSON *signal = cJSON_CreateObject();
+    cJSON_AddStringToObject(signal, "type", "offer");
+    cJSON_AddStringToObject(signal, "sdp", sdp_content);
+    paho_mqtt_publish(&client, QOS1, MQTT_PUBTOPIC, cJSON_Print(signal));
+    aos_msleep(1000);
+    cJSON_Delete(signal);
+}
 
-void mqtt_offer_publish(char *offer) {
+void mqtt_answer_publish(char *sdp_content) {
+    cJSON *signal = cJSON_CreateObject();
+    cJSON_AddStringToObject(signal, "type", "answer");
+    cJSON_AddStringToObject(signal, "sdp", sdp_content);
+    paho_mqtt_publish(&client, QOS1, MQTT_PUBTOPIC, cJSON_Print(signal));
+    aos_msleep(1000);
+    cJSON_Delete(signal);
+}
 
-    paho_mqtt_publish(&client, QOS1, MQTT_PUBTOPIC, offer);
-
+void mqtt_candidate_publish(char *sdp_content) {
+    cJSON *signal = cJSON_CreateObject();
+    cJSON_AddStringToObject(signal, "type", "candidate");
+    cJSON_AddStringToObject(signal, "candidate", sdp_content);
+    cJSON_AddNumberToObject(signal, "sdpMLineIndex", 0);
+    cJSON_AddStringToObject(signal, "sdpMid", "0");
+    paho_mqtt_publish(&client, QOS1, MQTT_PUBTOPIC, cJSON_Print(signal));
+    aos_msleep(1000);
+    cJSON_Delete(signal);
 }
 
 static void mqtt_sub_callback(MQTTClient *c, MessageData *msg_data)
@@ -140,7 +162,7 @@ static int mqtt_start(int argc, char **argv)
         client.condata.cleansession = 1;
 
         /* config MQTT will param. */
-        client.condata.willFlag = 1;
+        client.condata.willFlag = 0;
         client.condata.will.qos = 1;
         client.condata.will.retained = 0;
         client.condata.will.topicName.cstring = MQTT_PUBTOPIC;

@@ -9,6 +9,7 @@
 
 
 #define RSA_KEY_LENGTH 2048
+#define READ_TIMEOUT_MS 3000
 
 
 int dtls_srtp_udp_send(void *ctx, const char *buf, size_t len) {
@@ -18,9 +19,7 @@ int dtls_srtp_udp_send(void *ctx, const char *buf, size_t len) {
 
     int ret = juice_udp_sendto(*udp_socket, buf, len, dtls_srtp->remote_addr);
 
-    if (dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
-        JLOG_INFO("dtls server send: %d", ret);
-    }
+    JLOG_INFO("dtls send: %d", ret);
 
     return ret;
 }
@@ -38,9 +37,7 @@ int dtls_srtp_udp_recv(void *ctx, char *buf, size_t len) {
     while ((ret = udp_recvfrom(*udp_socket, buf, len, &_addr)) <= 0) {
         usleep(1000);
     }
-    if (dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
-        JLOG_INFO("dtls server recv: %d", ret);
-    }
+    JLOG_INFO("dtls recv: %d", ret);
     // JLOG_DEBUG("dtls_srtp_udp_recv (%d)", ret);
     // JLOG_ADDR_RECORD(&_addr);
 
@@ -184,7 +181,7 @@ int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_dat
     dtls_srtp_selfsign_cert(dtls_srtp);
 
 #if defined(CONFIG_LIBJUICE_USE_MBEDTLS) && defined(MBEDTLS_DEBUG_C)
-    if (dtls_srtp->ssl_debug_enable && dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
+    if (dtls_srtp->ssl_debug_enable && dtls_srtp->role == DTLS_SRTP_ROLE_CLIENT) {
         mbedtls_ssl_conf_dbg(&dtls_srtp->conf, _ssl_debug, NULL);
         mbedtls_debug_set_threshold(dtls_srtp->ssl_debug_level);
     }
@@ -200,7 +197,7 @@ int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_dat
 
     mbedtls_ssl_conf_rng(&dtls_srtp->conf, mbedtls_ctr_drbg_random, &dtls_srtp->ctr_drbg);
 
-    mbedtls_ssl_conf_read_timeout(&dtls_srtp->conf, 1000);
+    mbedtls_ssl_conf_read_timeout(&dtls_srtp->conf, READ_TIMEOUT_MS);
 
     if (dtls_srtp->role == DTLS_SRTP_ROLE_SERVER) {
 
@@ -466,7 +463,7 @@ int dtls_srtp_handshake(dtls_srtp_t *dtls_srtp, addr_record_t *addr) {
         ret = dtls_srtp_handshake_server(dtls_srtp);
 
     } else {
-
+        aos_msleep(1500);
         ret = dtls_srtp_handshake_client(dtls_srtp);
     }
 
@@ -578,4 +575,21 @@ static void mbedtls_log(int argc, char **argv) {
 }
 
 ALIOS_CLI_CMD_REGISTER(mbedtls_log, mbedtls_log, mbedtls_log);
+
+static void mbedtls_list_cs(int argc, char **argv) {
+    const int *list;
+
+    list = mbedtls_ssl_list_ciphersuites();
+    while (*list) {
+        JLOG_INFO(" %-42s", mbedtls_ssl_get_ciphersuite_name(*list));
+        list++;
+        if (!*list) {
+            break;
+        }
+        JLOG_INFO(" %s\n", mbedtls_ssl_get_ciphersuite_name(*list));
+        list++;
+    }
+    JLOG_INFO("\n");
+}
+ALIOS_CLI_CMD_REGISTER(mbedtls_list_cs, mbedtls_list_cs, mbedtls_list_cs);
 #endif
