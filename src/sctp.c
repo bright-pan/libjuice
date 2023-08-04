@@ -55,193 +55,234 @@ static const uint32_t crc32c_table[256] = {
     0xBE2DA0A5L, 0x4C4623A6L, 0x5F16D052L, 0xAD7D5351L};
 
 uint32_t crc32c(uint32_t crc, const uint8_t *data, unsigned int length) {
-	while (length--) {
-		crc = crc32c_table[(crc ^ *data++) & 0xFFL] ^ (crc >> 8);
-	}
-	return crc ^ 0xffffffff;
+    while (length--) {
+        crc = crc32c_table[(crc ^ *data++) & 0xFFL] ^ (crc >> 8);
+    }
+    return crc ^ 0xffffffff;
 }
 
 static uint32_t sctp_get_checksum(sctp_t *sctp, const uint8_t *buf, size_t len) {
 
-	uint32_t crc = crc32c(0xffffffff, buf, len);
-	return crc;
+    uint32_t crc = crc32c(0xffffffff, buf, len);
+    return crc;
 }
 
 static int sctp_outgoing_data_cb(void *userdata, void *buf, size_t len, uint8_t tos,
                                  uint8_t set_df) {
 
-	sctp_t *sctp = (sctp_t *)userdata;
+    sctp_t *sctp = (sctp_t *)userdata;
 
-	dtls_srtp_write(sctp->dtls_srtp, buf, len);
+    dtls_srtp_write(sctp->dtls_srtp, buf, len);
 
-	return 0;
+    return 0;
 }
 
 int sctp_outgoing_data(sctp_t *sctp, char *buf, size_t len, sctp_data_ppid_t ppid) {
 
 #ifdef HAVE_USRSCTP
-	struct sctp_sendv_spa spa = {0};
+    struct sctp_sendv_spa spa = {0};
 
-	spa.sendv_flags = SCTP_SEND_SNDINFO_VALID;
+    spa.sendv_flags = SCTP_SEND_SNDINFO_VALID;
 
-	spa.sendv_sndinfo.snd_sid = 0;
-	spa.sendv_sndinfo.snd_flags = SCTP_EOR;
-	spa.sendv_sndinfo.snd_ppid = htonl(ppid);
+    spa.sendv_sndinfo.snd_sid = 0;
+    spa.sendv_sndinfo.snd_flags = SCTP_EOR;
+    spa.sendv_sndinfo.snd_ppid = htonl(ppid);
 
-	if (usrsctp_sendv(sctp->sock, buf, len, NULL, 0, &spa, sizeof(spa), SCTP_SENDV_SPA, 0) < 0) {
-		JLOG_ERROR("sctp sendv error");
-		return -1;
-	}
+    if (usrsctp_sendv(sctp->sock, buf, len, NULL, 0, &spa, sizeof(spa), SCTP_SENDV_SPA, 0) < 0) {
+        JLOG_ERROR("sctp sendv error");
+        return -1;
+    }
 #else
-	size_t padding_len = 0;
-	size_t payload_max = SCTP_MTU - sizeof(sctp_packet_t) - sizeof(sctp_data_chunk_t);
-	size_t pos = 0;
-	static uint16_t sqn = 0;
+    size_t padding_len = 0;
+    size_t payload_max = SCTP_MTU - sizeof(sctp_packet_t) - sizeof(sctp_data_chunk_t);
+    size_t pos = 0;
+    static uint16_t sqn = 0;
 
-	sctp_packet_t *packet = (sctp_packet_t *)(sctp->buf);
-	sctp_data_chunk_t *chunk = (sctp_data_chunk_t *)(packet->chunks);
+    sctp_packet_t *packet = (sctp_packet_t *)(sctp->buf);
+    sctp_data_chunk_t *chunk = (sctp_data_chunk_t *)(packet->chunks);
 
-	packet->header.source_port = htons(sctp->local_port);
-	packet->header.destination_port = htons(sctp->remote_port);
-	packet->header.verification_tag = sctp->verification_tag;
+    packet->header.source_port = htons(sctp->local_port);
+    packet->header.destination_port = htons(sctp->remote_port);
+    packet->header.verification_tag = sctp->verification_tag;
 
-	chunk->type = SCTP_DATA;
-	chunk->iube = 0x06;
-	chunk->si = htons(0);
-	chunk->sqn = htons(sqn++);
-	chunk->ppid = htonl(ppid);
+    chunk->type = SCTP_DATA;
+    chunk->iube = 0x06;
+    chunk->si = htons(1);
+    chunk->sqn = htons(sqn++);
+    chunk->ppid = htonl(ppid);
 
-	while (len > payload_max) {
+    while (len > payload_max) {
 
-		chunk->length = htons(payload_max + sizeof(sctp_data_chunk_t));
-		chunk->tsn = htonl(sctp->tsn++);
-		memcpy(chunk->data, buf + pos, payload_max);
-		packet->header.checksum = 0;
+        chunk->length = htons(payload_max + sizeof(sctp_data_chunk_t));
+        chunk->tsn = htonl(sctp->tsn++);
+        memcpy(chunk->data, buf + pos, payload_max);
+        packet->header.checksum = 0;
 
-		packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t *)sctp->buf, SCTP_MTU);
+        packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t *)sctp->buf, SCTP_MTU);
 
-		sctp_outgoing_data_cb(sctp, sctp->buf, SCTP_MTU, 0, 0);
-		chunk->iube = 0x04;
-		len -= payload_max;
-		pos += payload_max;
-	}
+        sctp_outgoing_data_cb(sctp, sctp->buf, SCTP_MTU, 0, 0);
+        chunk->iube = 0x04;
+        len -= payload_max;
+        pos += payload_max;
+    }
 
-	if (len > 0) {
+    if (len > 0) {
 
-		chunk->length = htons(len + sizeof(sctp_data_chunk_t));
-		chunk->iube++;
-		chunk->tsn = htonl(sctp->tsn++);
-		memset(chunk->data, 0, payload_max);
-		memcpy(chunk->data, buf + pos, len);
-		packet->header.checksum = 0;
+        chunk->length = htons(len + sizeof(sctp_data_chunk_t));
+        chunk->iube++;
+        chunk->tsn = htonl(sctp->tsn++);
+        memset(chunk->data, 0, payload_max);
+        memcpy(chunk->data, buf + pos, len);
+        packet->header.checksum = 0;
 
-		padding_len = 4 * ((len + sizeof(sctp_data_chunk_t) + sizeof(sctp_packet_t) + 3) / 4);
+        padding_len = 4 * ((len + sizeof(sctp_data_chunk_t) + sizeof(sctp_packet_t) + 3) / 4);
 
-		packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t *)sctp->buf, padding_len);
+        packet->header.checksum = sctp_get_checksum(sctp, (const uint8_t *)sctp->buf, padding_len);
 
-		sctp_outgoing_data_cb(sctp, sctp->buf, padding_len, 0, 0);
-	}
+        sctp_outgoing_data_cb(sctp, sctp->buf, padding_len, 0, 0);
+    }
 #endif
-	return len;
+    return len;
 }
 
 void sctp_incoming_data(sctp_t *sctp, char *buf, size_t len) {
 
-	if (!sctp)
-		return;
+    if (!sctp)
+        return;
 
+    JLOG_INFO_DUMP_HEX(buf, len);
 #ifdef HAVE_USRSCTP
-	usrsctp_conninput(sctp, buf, len, 0);
+    usrsctp_conninput(sctp, buf, len, 0);
 #else
 
-	size_t length = 0;
-	size_t pos = sizeof(sctp_header_t);
-	sctp_chunk_common_t *chunk_common;
-	sctp_data_chunk_t *data_chunk;
-	sctp_sack_chunk_t *sack;
-	sctp_packet_t *in_packet = (sctp_packet_t *)buf;
-	sctp_packet_t *out_packet = (sctp_packet_t *)sctp->buf;
+    size_t length = 0;
+    size_t pos = sizeof(sctp_header_t);
+    sctp_chunk_common_t *chunk_common;
+    sctp_data_chunk_t *data_chunk;
+    sctp_sack_chunk_t *sack;
+    sctp_packet_t *in_packet = (sctp_packet_t *)buf;
+    sctp_packet_t *out_packet = (sctp_packet_t *)sctp->buf;
 
-	// Header
+    // Header
 #if 0
     JLOG_DEBUG("source_port %d", ntohs(in_packet->header.source_port));
     JLOG_DEBUG("destination_port %d", ntohs(in_packet->header.destination_port));
     JLOG_DEBUG("verification_tag %ld", ntohl(in_packet->header.verification_tag));
     JLOG_DEBUG("checksum %d", ntohs(in_packet->header.checksum));
 #endif
-	uint32_t crc32c = in_packet->header.checksum;
+    uint32_t crc32c = in_packet->header.checksum;
 
-	in_packet->header.checksum = 0;
+    in_packet->header.checksum = 0;
 
-	if (crc32c != sctp_get_checksum(sctp, (const uint8_t *)buf, len)) {
-		JLOG_ERROR("checksum error");
-		return;
-	}
+    if (crc32c != sctp_get_checksum(sctp, (const uint8_t *)buf, len)) {
+        JLOG_ERROR("checksum error");
+        return;
+    }
 
-	// prepare outgoing packet
-	memset(sctp->buf, 0, sizeof(sctp->buf));
+    // prepare outgoing packet
+    memset(sctp->buf, 0, sizeof(sctp->buf));
 
-	while ((4 * (pos + 3) / 4) < len) {
+    while ((4 * (pos + 3) / 4) < len) {
 
-		chunk_common = (sctp_chunk_common_t *)(buf + pos);
+        chunk_common = (sctp_chunk_common_t *)(buf + pos);
 
-		switch (chunk_common->type) {
+        switch (chunk_common->type) {
 
-		case SCTP_DATA:
-			JLOG_DEBUG("SCTP_DATA");
-			data_chunk = (sctp_data_chunk_t *)in_packet->chunks;
+        case SCTP_DATA:
+            JLOG_DEBUG("SCTP_DATA");
+            data_chunk = (sctp_data_chunk_t *)in_packet->chunks;
+            sack = (sctp_sack_chunk_t *)out_packet->chunks;
+            sack->common.type = SCTP_SACK;
+            sack->common.flags = 0x00;
+            sack->common.length = htons(16);
+            sack->cumulative_tsn_ack = data_chunk->tsn;
+            sack->a_rwnd = htonl(0x02);
+            length = ntohs(sack->common.length) + sizeof(sctp_header_t);
+            switch (ntohl(data_chunk->ppid)) {
+                case DATA_CHANNEL_PPID_CONTROL: {
+                    if (data_chunk->data[0] == DATA_CHANNEL_OPEN) {
+                        if (!sctp->connected) {
+                            sctp->connected = 1;
+                            if (sctp->onopen) {
+                                sctp->onopen(sctp->userdata);
+                            }
+                        }
+                    }
+                    break;
+                }
+                case DATA_CHANNEL_PPID_DOMSTRING: {
+                    //void (*onmessasge)(char *msg, size_t len, void *userdata);
+                    uint16_t data_length = ntohs(data_chunk->length);
+                    if (sctp->connected && sctp->onmessasge && data_length > 16) {
+                        // JLOG_INFO("length = %d", data_length);
+                        sctp->onmessasge((char *)(data_chunk->data), data_length - 16, sctp->userdata);
+                    }
+                    break;
+                }
+                case DATA_CHANNEL_PPID_BINARY: {
+                    break;
+                }
+            }
+            //DATA_CHANNEL_OPEN
+            // if (ntohl(data_chunk->ppid) == DATA_CHANNEL_PPID_CONTROL &&
+            //     data_chunk->data[0] == DATA_CHANNEL_OPEN) {
+            //     sack = (sctp_sack_chunk_t *)out_packet->chunks;
+            //     sack->common.type = SCTP_SACK;
+            //     sack->common.flags = 0x00;
+            //     sack->common.length = htons(16);
+            //     sack->cumulative_tsn_ack = data_chunk->tsn;
+            //     sack->a_rwnd = htonl(0x02);
+            //     length = ntohs(sack->common.length) + sizeof(sctp_header_t);
 
-			if (ntohl(data_chunk->ppid) == DATA_CHANNEL_PPID_CONTROL &&
-			    data_chunk->data[0] == 0x03) {
-				sack = (sctp_sack_chunk_t *)out_packet->chunks;
-				sack->common.type = SCTP_SACK;
-				sack->common.flags = 0x00;
-				sack->common.length = htons(16);
-				sack->cumulative_tsn_ack = data_chunk->tsn;
-				sack->a_rwnd = htonl(0x02);
-				length = ntohs(sack->common.length) + sizeof(sctp_header_t);
+            //     if (!sctp->connected) {
+            //         sctp->connected = 1;
+            //         if (sctp->onopen) {
+            //             sctp->onopen(sctp->userdata);
+            //         }
+            //     }
+            // }
+            break;
+        case SCTP_HEARTBEAT:
+            JLOG_DEBUG("SCTP_HEARTBEAT");
+            sctp_heartbeat_chunk_t *heartbeat_chunk = (sctp_heartbeat_chunk_t *)in_packet->chunks;
+            sctp_heartbeat_chunk_t *heartbeat_ack = (sctp_heartbeat_chunk_t *)out_packet->chunks;
+            *heartbeat_ack = *heartbeat_chunk;
+            heartbeat_ack->common.type = SCTP_HEARTBEAT_ACK;
+            length = ntohs(heartbeat_ack->common.length) + sizeof(sctp_header_t);
+            break;
+        case SCTP_INIT:
+            JLOG_DEBUG("SCTP_INIT");
 
-				if (!sctp->connected) {
-					sctp->connected = 1;
-					if (sctp->onopen) {
-						sctp->onopen(sctp->userdata);
-					}
-				}
-			}
-			break;
-		case SCTP_INIT:
-			JLOG_DEBUG("SCTP_INIT");
+            sctp_init_chunk_t *init_chunk;
+            init_chunk = (sctp_init_chunk_t *)in_packet->chunks;
+            sctp->verification_tag = init_chunk->initiate_tag;
 
-			sctp_init_chunk_t *init_chunk;
-			init_chunk = (sctp_init_chunk_t *)in_packet->chunks;
-			sctp->verification_tag = init_chunk->initiate_tag;
+            sctp_init_chunk_t *init_ack = (sctp_init_chunk_t *)out_packet->chunks;
+            init_ack->common.type = SCTP_INIT_ACK;
+            init_ack->common.flags = 0x00;
+            init_ack->common.length = htons(20 + 8);
+            init_ack->initiate_tag = htonl(0x12345678);
+            init_ack->a_rwnd = htonl(0x100000);
+            init_ack->number_of_outbound_streams = 0xffff;
+            init_ack->number_of_inbound_streams = 0xffff;
+            init_ack->initial_tsn = htonl(sctp->tsn);
 
-			sctp_init_chunk_t *init_ack = (sctp_init_chunk_t *)out_packet->chunks;
-			init_ack->common.type = SCTP_INIT_ACK;
-			init_ack->common.flags = 0x00;
-			init_ack->common.length = htons(20 + 8);
-			init_ack->initiate_tag = htonl(0x12345678);
-			init_ack->a_rwnd = htonl(0x100000);
-			init_ack->number_of_outbound_streams = 0xffff;
-			init_ack->number_of_inbound_streams = 0xffff;
-			init_ack->initial_tsn = htonl(sctp->tsn);
+            sctp_chunk_param_t *param = init_ack->param;
 
-			sctp_chunk_param_t *param = init_ack->param;
+            param->type = htons(SCTP_PARAM_STATE_COOKIE);
+            param->length = htons(0x08);
+            uint32_t value = htonl(0x02);
+            memcpy(&param->value, &value, 4);
+            length = ntohs(init_ack->common.length) + sizeof(sctp_header_t);
+            break;
+        case SCTP_SACK:
 
-			param->type = htons(SCTP_PARAM_STATE_COOKIE);
-			param->length = htons(0x08);
-			uint32_t value = htonl(0x02);
-			memcpy(&param->value, &value, 4);
-			length = ntohs(init_ack->common.length) + sizeof(sctp_header_t);
-			break;
-		case SCTP_SACK:
-
-			JLOG_DEBUG("SCTP_SACK");
-			sack = (sctp_sack_chunk_t *)in_packet->chunks;
-			JLOG_DEBUG("cumulative_tsn_ack %ld", ntohl(sack->cumulative_tsn_ack));
-			JLOG_DEBUG("a_rwnd %ld", ntohl(sack->a_rwnd));
-			JLOG_DEBUG("number_of_gap_ack_blocks %d", sack->number_of_gap_ack_blocks);
-			JLOG_DEBUG("number_of_dup_tsns %d", sack->number_of_dup_tsns);
+            JLOG_DEBUG("SCTP_SACK");
+            sack = (sctp_sack_chunk_t *)in_packet->chunks;
+            JLOG_DEBUG("cumulative_tsn_ack %ld", ntohl(sack->cumulative_tsn_ack));
+            JLOG_DEBUG("a_rwnd %ld", ntohl(sack->a_rwnd));
+            JLOG_DEBUG("number_of_gap_ack_blocks %d", sack->number_of_gap_ack_blocks);
+            JLOG_DEBUG("number_of_dup_tsns %d", sack->number_of_dup_tsns);
 
 // XXX: unordered sequence
 #if 0
@@ -266,34 +307,34 @@ void sctp_incoming_data(sctp_t *sctp, char *buf, size_t len) {
         }
 #endif
 
-			break;
-		case SCTP_COOKIE_ECHO:
-			JLOG_DEBUG("SCTP_COOKIE_ECHO");
-			sctp_chunk_common_t *common = (sctp_chunk_common_t *)out_packet->chunks;
-			common->type = SCTP_COOKIE_ACK;
-			common->length = htons(4);
-			length = ntohs(common->length) + sizeof(sctp_header_t);
-			break;
-		default:
-			JLOG_INFO("Unknown chunk type %d", chunk_common->type);
-			length = 0;
-			break;
-		}
+            break;
+        case SCTP_COOKIE_ECHO:
+            JLOG_DEBUG("SCTP_COOKIE_ECHO");
+            sctp_chunk_common_t *common = (sctp_chunk_common_t *)out_packet->chunks;
+            common->type = SCTP_COOKIE_ACK;
+            common->length = htons(4);
+            length = ntohs(common->length) + sizeof(sctp_header_t);
+            break;
+        default:
+            JLOG_INFO("Unknown chunk type %d", chunk_common->type);
+            length = 0;
+            break;
+        }
 
-		out_packet->header.source_port = htons(sctp->local_port);
-		out_packet->header.destination_port = htons(sctp->remote_port);
-		out_packet->header.verification_tag = sctp->verification_tag;
-		out_packet->header.checksum = 0x00;
+        out_packet->header.source_port = htons(sctp->local_port);
+        out_packet->header.destination_port = htons(sctp->remote_port);
+        out_packet->header.verification_tag = sctp->verification_tag;
+        out_packet->header.checksum = 0x00;
 
-		if (length > 0) {
-			// padding 4
-			length = (4 * ((length + 3) / 4));
-			out_packet->header.checksum = sctp_get_checksum(sctp, sctp->buf, length);
-			dtls_srtp_write(sctp->dtls_srtp, (char *)sctp->buf, length);
-			// sctp_outgoing_data_cb(sctp, sctp->buf, SCTP_MTU, 0, 0);
-		}
-		pos += ntohs(chunk_common->length);
-	}
+        if (length > 0) {
+            // padding 4
+            length = (4 * ((length + 3) / 4));
+            out_packet->header.checksum = sctp_get_checksum(sctp, sctp->buf, length);
+            dtls_srtp_write(sctp->dtls_srtp, (char *)sctp->buf, length);
+            // sctp_outgoing_data_cb(sctp, sctp->buf, SCTP_MTU, 0, 0);
+        }
+        pos += ntohs(chunk_common->length);
+    }
 
 #endif
 }
@@ -341,52 +382,52 @@ stream, int flags) {
 static int sctp_incoming_data_cb(struct socket *sock, union sctp_sockstore addr, void *data,
                                  size_t len, struct sctp_rcvinfo recv_info, int flags,
                                  void *userdata) {
-	sctp_t *sctp = (sctp_t *)userdata;
-	JLOG_DEBUG("Data of length %u received on stream %u with SSN %u, TSN %u, PPID %u\n",
-	           (uint32_t)len, recv_info.rcv_sid, recv_info.rcv_ssn, recv_info.rcv_tsn,
-	           ntohl(recv_info.rcv_ppid));
+    sctp_t *sctp = (sctp_t *)userdata;
+    JLOG_DEBUG("Data of length %u received on stream %u with SSN %u, TSN %u, PPID %u\n",
+               (uint32_t)len, recv_info.rcv_sid, recv_info.rcv_ssn, recv_info.rcv_tsn,
+               ntohl(recv_info.rcv_ppid));
 
-	if (flags & MSG_NOTIFICATION) {
-		JLOG_INFO("MSG_NOTIFICATION");
-	} else {
-		sctp_handle_incoming_data(sctp, data, len, ntohl(recv_info.rcv_ppid), recv_info.rcv_sid,
-		                          flags);
-	}
-	return 0;
+    if (flags & MSG_NOTIFICATION) {
+        JLOG_INFO("MSG_NOTIFICATION");
+    } else {
+        sctp_handle_incoming_data(sctp, data, len, ntohl(recv_info.rcv_ppid), recv_info.rcv_sid,
+                                  flags);
+    }
+    return 0;
 }
 #endif
 
 int sctp_create_socket(sctp_t *sctp, dtls_srtp_t *dtls_srtp) {
 
-	sctp->dtls_srtp = dtls_srtp;
-	sctp->local_port = 5000;
-	sctp->remote_port = 5000;
-	sctp->tsn = 1234;
+    sctp->dtls_srtp = dtls_srtp;
+    sctp->local_port = 5000;
+    sctp->remote_port = 5000;
+    sctp->tsn = 1234;
 #ifdef HAVE_USRSCTP
-	int ret = -1;
-	usrsctp_init(0, sctp_outgoing_data_cb, NULL);
-	usrsctp_sysctl_set_sctp_ecn_enable(0);
-	usrsctp_register_address(sctp);
+    int ret = -1;
+    usrsctp_init(0, sctp_outgoing_data_cb, NULL);
+    usrsctp_sysctl_set_sctp_ecn_enable(0);
+    usrsctp_register_address(sctp);
 
-	struct socket *sock =
-	    usrsctp_socket(AF_CONN, SOCK_STREAM, IPPROTO_SCTP, sctp_incoming_data_cb, NULL, 0, sctp);
+    struct socket *sock =
+        usrsctp_socket(AF_CONN, SOCK_STREAM, IPPROTO_SCTP, sctp_incoming_data_cb, NULL, 0, sctp);
 
-	if (!sock) {
-		JLOG_ERROR("usrsctp_socket failed");
-		return -1;
-	}
+    if (!sock) {
+        JLOG_ERROR("usrsctp_socket failed");
+        return -1;
+    }
 
-	do {
+    do {
 
-		if (usrsctp_set_non_blocking(sock, 1) < 0) {
-			JLOG_ERROR("usrsctp_set_non_blocking failed");
-			break;
-		}
+        if (usrsctp_set_non_blocking(sock, 1) < 0) {
+            JLOG_ERROR("usrsctp_set_non_blocking failed");
+            break;
+        }
 
-		struct linger lopt;
-		lopt.l_onoff = 1;
-		lopt.l_linger = 0;
-		usrsctp_setsockopt(sock, SOL_SOCKET, SO_LINGER, &lopt, sizeof(lopt));
+        struct linger lopt;
+        lopt.l_onoff = 1;
+        lopt.l_linger = 0;
+        usrsctp_setsockopt(sock, SOL_SOCKET, SO_LINGER, &lopt, sizeof(lopt));
 
 #if 0
     struct sctp_paddrparams peer_param;
@@ -396,79 +437,79 @@ int sctp_create_socket(sctp_t *sctp, dtls_srtp_t *dtls_srtp) {
     usrsctp_setsockopt(s, IPPROTO_SCTP, SCTP_PEER_ADDR_PARAMS, &peer_param, sizeof peer_param);
 #endif
 
-		struct sctp_assoc_value av;
-		av.assoc_id = SCTP_ALL_ASSOC;
-		av.assoc_value = 1;
-		usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_ENABLE_STREAM_RESET, &av, sizeof(av));
+        struct sctp_assoc_value av;
+        av.assoc_id = SCTP_ALL_ASSOC;
+        av.assoc_value = 1;
+        usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_ENABLE_STREAM_RESET, &av, sizeof(av));
 
-		uint32_t nodelay = 1;
-		usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &nodelay, sizeof(nodelay));
+        uint32_t nodelay = 1;
+        usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &nodelay, sizeof(nodelay));
 
-		struct sctp_initmsg init_msg;
-		memset(&init_msg, 0, sizeof init_msg);
-		init_msg.sinit_num_ostreams = 300;
-		init_msg.sinit_max_instreams = 300;
-		usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_INITMSG, &init_msg, sizeof init_msg);
+        struct sctp_initmsg init_msg;
+        memset(&init_msg, 0, sizeof init_msg);
+        init_msg.sinit_num_ostreams = 300;
+        init_msg.sinit_max_instreams = 300;
+        usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_INITMSG, &init_msg, sizeof init_msg);
 
-		struct sockaddr_conn sconn;
-		memset(&sconn, 0, sizeof(sconn));
-		sconn.sconn_family = AF_CONN;
-		sconn.sconn_port = htons(sctp->local_port);
-		sconn.sconn_addr = (void *)sctp;
-		ret = usrsctp_bind(sock, (struct sockaddr *)&sconn, sizeof(sconn));
+        struct sockaddr_conn sconn;
+        memset(&sconn, 0, sizeof(sconn));
+        sconn.sconn_family = AF_CONN;
+        sconn.sconn_port = htons(sctp->local_port);
+        sconn.sconn_addr = (void *)sctp;
+        ret = usrsctp_bind(sock, (struct sockaddr *)&sconn, sizeof(sconn));
 
-		struct sockaddr_conn rconn;
+        struct sockaddr_conn rconn;
 
-		memset(&rconn, 0, sizeof(struct sockaddr_conn));
-		rconn.sconn_family = AF_CONN;
-		rconn.sconn_port = htons(sctp->remote_port);
-		rconn.sconn_addr = (void *)sctp;
-		ret = usrsctp_connect(sock, (struct sockaddr *)&rconn, sizeof(struct sockaddr_conn));
+        memset(&rconn, 0, sizeof(struct sockaddr_conn));
+        rconn.sconn_family = AF_CONN;
+        rconn.sconn_port = htons(sctp->remote_port);
+        rconn.sconn_addr = (void *)sctp;
+        ret = usrsctp_connect(sock, (struct sockaddr *)&rconn, sizeof(struct sockaddr_conn));
 
-		if (ret < 0 && errno != EINPROGRESS) {
-			JLOG_ERROR("connect error");
-			break;
-		}
+        if (ret < 0 && errno != EINPROGRESS) {
+            JLOG_ERROR("connect error");
+            break;
+        }
 
-		ret = 0;
+        ret = 0;
 
-	} while (0);
+    } while (0);
 
-	if (ret < 0) {
+    if (ret < 0) {
 
-		usrsctp_shutdown(sctp->sock, SHUT_RDWR);
-		usrsctp_close(sctp->sock);
-		sctp->sock = NULL;
-		return -1;
-	}
+        usrsctp_shutdown(sctp->sock, SHUT_RDWR);
+        usrsctp_close(sctp->sock);
+        sctp->sock = NULL;
+        return -1;
+    }
 
-	sctp->sock = sock;
+    sctp->sock = sock;
 #endif
 
-	return 0;
+    return 0;
 }
 
 int sctp_is_connected(sctp_t *sctp) { return sctp->connected; }
 
 void sctp_destroy(sctp_t *sctp) {
 #ifdef HAVE_USRSCTP
-	if (sctp) {
+    if (sctp) {
 
-		if (sctp->sock) {
-			usrsctp_shutdown(sctp->sock, SHUT_RDWR);
-			usrsctp_close(sctp->sock);
-			sctp->sock = NULL;
-		}
+        if (sctp->sock) {
+            usrsctp_shutdown(sctp->sock, SHUT_RDWR);
+            usrsctp_close(sctp->sock);
+            sctp->sock = NULL;
+        }
 
-		free(sctp);
-		sctp = NULL;
-	}
+        free(sctp);
+        sctp = NULL;
+    }
 #endif
 }
 
 void sctp_onmessage(sctp_t *sctp, void (*onmessasge)(char *msg, size_t len, void *userdata)) {
 
-	sctp->onmessasge = onmessasge;
+    sctp->onmessasge = onmessasge;
 }
 
 void sctp_onopen(sctp_t *sctp, void (*onopen)(void *userdata)) { sctp->onopen = onopen; }

@@ -122,6 +122,13 @@ typedef struct {
 
 } sctp_init_chunk_t;
 
+typedef struct {
+
+  sctp_chunk_common_t common;
+  sctp_chunk_param_t param[0];
+
+} sctp_heartbeat_chunk_t;
+
 #endif
 
 typedef enum SctpDataPpid {

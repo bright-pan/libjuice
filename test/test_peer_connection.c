@@ -1,4 +1,4 @@
-#include "test_config.h"
+//#include "test_config.h"
 #include "peer_connection.h"
 #include "udp.h"
 #include "log.h"
@@ -17,6 +17,23 @@ char buffer[BUFFER_SIZE];
 peer_connection_t peer_connection_server, peer_connection_client;
 peer_options_t server_options, client_options;
 
+
+
+static void on_channel_msg(char *msg, size_t len, void *userdata) {
+    JLOG_INFO("channel msg: %s", msg);
+}
+
+static void on_channel_open(void *userdata) {
+  JLOG_INFO("channel open\n");
+}
+
+static void on_channel_close(void *userdata) {
+  
+  JLOG_INFO("channel close\n");
+}
+
+
+
 static void on_state_change(peer_connection_state_t state, void *data) {
 
   JLOG_INFO("state is changed: %d\n", state);
@@ -30,6 +47,8 @@ static void pc_client(int argc, char **argv) {
     }
     peer_connection_t *pc = &peer_connection_client;
     peer_options_t *po = &client_options;
+
+    peer_connection_set_datachannel_cb(pc, on_channel_msg, on_channel_open, on_channel_close);
     if (strstr(argv[1], "create")) {
         peer_options_set_default(po, 57000, 58000);
         peer_connection_configure(pc, "peer_client", DTLS_SRTP_ROLE_CLIENT, po);
@@ -124,6 +143,12 @@ static void pc_client(int argc, char **argv) {
             JLOG_INFO("%s recv: %s, %d", pc->name, buffer, ret);
         } else {
             JLOG_ERROR("Usage: %s recv number(max=%d)\n", argv[0], BUFFER_SIZE);
+        }
+    } else if (strstr(argv[1], "channel_send")) {
+        if (argc == 3) {
+            sctp_outgoing_data(&pc->sctp, argv[2], strlen(argv[2]), PPID_STRING);
+        } else {
+            JLOG_ERROR("Usage: %s send message\n", argv[0]);
         }
    } else {
         JLOG_ERROR("\nUsage: %s create|start\nUsage: %s set local|remote\nUsage: %s get local|remote", argv[0], argv[0], argv[0]);

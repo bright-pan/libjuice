@@ -155,10 +155,10 @@ void peer_connection_set_cb_track(peer_connection_t *pc, void (*on_track)(uint8_
  * @param[in] callback function when connection is opened
  * @param[in] callback function when connection is closed
  */
-void peer_connection_set_cbdatachannel(peer_connection_t *pc,
- void (*onmessasge)(char *msg, size_t len, void *userdata),
- void (*onopen)(void *userdata),
- void (*onclose)(void *userdata));
+void peer_connection_set_datachannel_cb(peer_connection_t *pc,
+ void (*on_messasge)(char *msg, size_t len, void *userdata),
+ void (*on_open)(void *userdata),
+ void (*on_close)(void *userdata));
 
 /**
  * @brief send message to data channel

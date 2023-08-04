@@ -19,6 +19,7 @@
 #endif
 
 #define BUFFER_SIZE 4096
+#define DUMP_IN_LINE 20
 
 static const char *log_level_names[] = {"VERBOSE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
 
@@ -123,6 +124,98 @@ void juice_log_write(juice_log_level_t level, const char *file, int line, const 
 			fprintf(stdout, "%s", "\x1B[0m\x1B[0K");
 
 		fprintf(stdout, "\n");
+		fflush(stdout);
+	}
+
+__exit:
+	mutex_unlock(&log_mutex);
+}
+
+void snprintf_hex(char *msg, size_t msg_len, const char *b, size_t len, const size_t in_line, const char *prefix)
+{
+    size_t i = 0;
+    const char *end = b + len;
+    if (prefix == NULL) {
+        prefix = "";
+    }
+
+    while (i < len) {
+        if (i % in_line ? 0 : 1) {
+            snprintf(msg + i, msg_len, "\n%s", prefix);
+        }
+        snprintf(msg + i, msg_len, "%02X ", *(b+i));
+		i++;
+    }
+    snprintf(msg + i, msg_len, "\n");
+}
+
+void fprintf_hex(FILE *file, const char *b, size_t len, const size_t in_line, const char *prefix, const char *suffix)
+{
+    size_t i = 0;
+
+    if (prefix == NULL) {
+        prefix = "";
+    }
+
+    while (i < len) {
+        if (i % in_line ? 0 : 1) {
+            fprintf(file, "\n%s", prefix);
+        }
+        fprintf(file, "%02X ", *(b+i));
+		i++;
+    }
+    fprintf(file, "%s", suffix);
+}
+
+void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, const char *buf, int length) {
+	if (!juice_log_is_enabled(level))
+		return;
+
+	mutex_lock(&log_mutex);
+
+#if !RELEASE
+	const char *filename = file + strlen(file);
+	while (filename != file && *filename != '/' && *filename != '\\')
+		--filename;
+	if (filename != file)
+		++filename;
+#else
+	(void)file;
+	(void)line;
+#endif
+
+	if (log_cb) {
+		char message[BUFFER_SIZE];
+		char prefix[128];
+		int len = 0;
+#if !RELEASE
+		len = snprintf(prefix, 128, "%s:%d: ", filename, line);
+		if (len < 0)
+			goto __exit;
+#endif
+		snprintf_hex(message, BUFFER_SIZE, buf, length, DUMP_IN_LINE, prefix);
+
+		log_cb(level, message);
+
+	} else {
+		char message[BUFFER_SIZE];
+		char prefix[128];
+		int len = 0;
+		time_t t = time(NULL);
+		struct tm lt;
+		char buffer[16];
+		if (get_localtime(&t, &lt) != 0 || strftime(buffer, 16, "%H:%M:%S", &lt) == 0)
+			buffer[0] = '\0';
+
+		if (use_color()) {
+			snprintf(prefix, 128, "%s%s %-7s %s:%d: ", log_level_colors[level], buffer, log_level_names[level], filename, line);
+		} else {
+			snprintf(prefix, 128, "%s %-7s %s:%d: ", buffer, log_level_names[level], filename, line);
+		}
+
+#if !RELEASE
+		fprintf_hex(stdout, buf, length, DUMP_IN_LINE, prefix, use_color() ? "\x1B[0m\x1B[0K\n" : "\n");
+#endif
 		fflush(stdout);
 	}
 

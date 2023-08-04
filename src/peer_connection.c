@@ -320,39 +320,27 @@ void peer_connection_loop(void *param) {
 
     while(1) {
         switch (pc->state) {
-            case PEER_CONNECTION_START:
-
+            case PEER_CONNECTION_START: {
                 peer_connection_state_start(pc);
-            // if (!pc->b_offer_created) {
-            //   peer_connection_state_new(pc);
-            // }
-            break;
-
-            case PEER_CONNECTION_CONNECTING:
-            if (agent_get_selected_candidate_pair(pc->juice_agent, &pc->local_cand, &pc->remote_cand) == 0) {
-                char address[JUICE_MAX_ADDRESS_STRING_LEN];
-                memset(address, 0, JUICE_MAX_ADDRESS_STRING_LEN);
-                addr_record_to_string(&pc->local_cand.resolved, address, JUICE_MAX_ADDRESS_STRING_LEN);
-                JLOG_INFO("%s local address: %s\n", pc->name, address);
-                addr_record_to_string(&pc->remote_cand.resolved, address, JUICE_MAX_ADDRESS_STRING_LEN);
-                JLOG_INFO("%s remote address: %s\n", pc->name, address);
-                STATE_CHANGED(pc, PEER_CONNECTION_HANDSHAKE);
-            } else {
-                //no avail
+                // if (!pc->b_offer_created) {
+                //   peer_connection_state_new(pc);
+                // }
+                break;
             }
-
-            //   if (agent_connectivity_check(pc->juice_agent)) {
-
-            //     JLOG_DEBUG("Connectivity check success. pair: %p", pc->juice_agent.nominated_pair);
-
-            //     STATE_CHANGED(pc, PEER_CONNECTION_HANDSHAKE);
-            //     pc->juice_agent.selected_pair = pc->juice_agent.nominated_pair;
-            //   }
-
-            //   agent_recv(pc->juice_agent, pc->juice_agent_buf, sizeof(pc->juice_agent_buf));
-
-            break;
-
+            case PEER_CONNECTION_CONNECTING: {
+                if (agent_get_selected_candidate_pair(pc->juice_agent, &pc->local_cand, &pc->remote_cand) == 0) {
+                    char address[JUICE_MAX_ADDRESS_STRING_LEN];
+                    memset(address, 0, JUICE_MAX_ADDRESS_STRING_LEN);
+                    addr_record_to_string(&pc->local_cand.resolved, address, JUICE_MAX_ADDRESS_STRING_LEN);
+                    JLOG_INFO("%s local address: %s\n", pc->name, address);
+                    addr_record_to_string(&pc->remote_cand.resolved, address, JUICE_MAX_ADDRESS_STRING_LEN);
+                    JLOG_INFO("%s remote address: %s\n", pc->name, address);
+                    STATE_CHANGED(pc, PEER_CONNECTION_HANDSHAKE);
+                } else {
+                    //no avail
+                }
+                break;
+            }
             case PEER_CONNECTION_HANDSHAKE:
             if (pc->dtls_srtp.state == DTLS_SRTP_STATE_INIT) {
                 //juice_suspend(pc->juice_agent);
@@ -371,11 +359,11 @@ void peer_connection_loop(void *param) {
                 }
         #endif
 
-                //   if (pc->options.datachannel) {
-                //     LOGI("SCTP create socket");
+                  if (pc->options.datachannel) {
+                    JLOG_INFO("SCTP create socket");
                 //     pc->sctp.data_rb = pc->data_rb;
-                //     sctp_create_socket(&pc->sctp, &pc->dtls_srtp);
-                //   }
+                    sctp_create_socket(&pc->sctp, &pc->dtls_srtp);
+                  }
 
                 }
             } else if (pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
@@ -405,8 +393,8 @@ void peer_connection_loop(void *param) {
 
         //             dtls_srtp_write(&pc->dtls_srtp, pc->juice_agent_buf, bytes);
         //          }
-                }
                 STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
+                }
                 // if ((pc->juice_agent_ret = agent_recv(pc->juice_agent, pc->juice_agent_buf, sizeof(pc->juice_agent_buf))) > 0) {
                 //   JLOG_DEBUG("agent_recv %d", pc->juice_agent_ret);
 
@@ -432,8 +420,14 @@ void peer_connection_loop(void *param) {
                 // }
             //   }
             break;
-            case PEER_CONNECTION_COMPLETED:
-            break;
+            case PEER_CONNECTION_COMPLETED: {
+                char buf[4096];
+                int recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
+                if (recv_count > 0) {
+                    sctp_incoming_data(&pc->sctp, buf, recv_count);
+                }
+                break;
+            }
             case PEER_CONNECTION_FAILED:
             break;
             case PEER_CONNECTION_DISCONNECTED:
@@ -443,7 +437,7 @@ void peer_connection_loop(void *param) {
             default:
             break;
         }
-        aos_msleep(100);
+        aos_msleep(10);
     }
 }
 
@@ -615,17 +609,17 @@ void peer_connection_set_cb_track(peer_connection_t *pc, void (*on_track)(uint8_
   pc->cb_track = on_track;
 }
 
-void peer_connection_set_cbdatachannel(peer_connection_t *pc,
- void (*onmessasge)(char *msg, size_t len, void *userdata),
- void (*onopen)(void *userdata),
- void (*onclose)(void *userdata)) {
+void peer_connection_set_datachannel_cb(peer_connection_t *pc,
+ void (*on_messasge)(char *msg, size_t len, void *userdata),
+ void (*on_open)(void *userdata),
+ void (*on_close)(void *userdata)) {
 
-  // if (pc) {
+  if (pc) {
 
-  //   sctp_onopen(&pc->sctp, onopen);
-  //   sctp_onclose(&pc->sctp, onclose);
-  //   sctp_onmessage(&pc->sctp, onmessasge);
-  // }
+    sctp_onopen(&pc->sctp, on_open);
+    sctp_onclose(&pc->sctp, on_close);
+    sctp_onmessage(&pc->sctp, on_messasge);
+  }
 }
 
 void peer_connection_set_current_ip(const char *ip) {
