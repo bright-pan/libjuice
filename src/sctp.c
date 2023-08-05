@@ -77,7 +77,7 @@ static int sctp_outgoing_data_cb(void *userdata, void *buf, size_t len, uint8_t 
     return 0;
 }
 
-int sctp_outgoing_data(sctp_t *sctp, char *buf, size_t len, sctp_data_ppid_t ppid) {
+int sctp_outgoing_data(sctp_t *sctp, char *buf, size_t len, uint16_t si, sctp_data_ppid_t ppid) {
 
 #ifdef HAVE_USRSCTP
     struct sctp_sendv_spa spa = {0};
@@ -107,7 +107,7 @@ int sctp_outgoing_data(sctp_t *sctp, char *buf, size_t len, sctp_data_ppid_t ppi
 
     chunk->type = SCTP_DATA;
     chunk->iube = 0x06;
-    chunk->si = htons(1);
+    chunk->si = htons(si);
     chunk->sqn = htons(sqn++);
     chunk->ppid = htonl(ppid);
 
@@ -211,11 +211,9 @@ void sctp_incoming_data(sctp_t *sctp, char *buf, size_t len) {
                     break;
                 }
                 case DATA_CHANNEL_PPID_DOMSTRING: {
-                    //void (*onmessasge)(char *msg, size_t len, void *userdata);
                     uint16_t data_length = ntohs(data_chunk->length);
                     if (sctp->connected && sctp->onmessasge && data_length > 16) {
-                        // JLOG_INFO("length = %d", data_length);
-                        sctp->onmessasge((char *)(data_chunk->data), data_length - 16, sctp->userdata);
+                        sctp->onmessasge((char *)(data_chunk->data), data_length - 16, ntohs(data_chunk->si), sctp->userdata);
                     }
                     break;
                 }
@@ -507,11 +505,18 @@ void sctp_destroy(sctp_t *sctp) {
 #endif
 }
 
-void sctp_onmessage(sctp_t *sctp, void (*onmessasge)(char *msg, size_t len, void *userdata)) {
-
+void sctp_onmessage(sctp_t *sctp, void (*onmessasge)(char *msg, size_t len, uint16_t si, void *userdata)) {
     sctp->onmessasge = onmessasge;
 }
 
-void sctp_onopen(sctp_t *sctp, void (*onopen)(void *userdata)) { sctp->onopen = onopen; }
+void sctp_onopen(sctp_t *sctp, void (*onopen)(void *userdata)) {
+    sctp->onopen = onopen;
+}
 
-void sctp_onclose(sctp_t *sctp, void (*onclose)(void *userdata)) { sctp->onclose = onclose; }
+void sctp_onclose(sctp_t *sctp, void (*onclose)(void *userdata)) {
+    sctp->onclose = onclose;
+}
+
+void sctp_set_userdata(sctp_t *sctp, void *userdata) {
+    sctp->userdata = userdata;
+}

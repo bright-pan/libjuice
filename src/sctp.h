@@ -103,7 +103,7 @@ typedef struct {
   uint8_t iube;
   uint16_t length;
   uint32_t tsn;
-  uint16_t si;
+  uint16_t si;//流标识符，用于标记通道，类似通道id，终端会根据这个来判断是哪个流的数据，用于复用通道。
   uint16_t sqn;
   uint32_t ppid;
   uint8_t data[0];
@@ -131,7 +131,7 @@ typedef struct {
 
 #endif
 
-typedef enum SctpDataPpid {
+typedef enum {
 
   PPID_CONTROL = 50,
   PPID_STRING = 51,
@@ -153,7 +153,7 @@ typedef struct {
   dtls_srtp_t *dtls_srtp;
 
   /* datachannel */
-  void (*onmessasge)(char *msg, size_t len, void *userdata);
+  void (*onmessasge)(char *msg, size_t len, uint16_t si, void *userdata);
   void (*onopen)(void *userdata);
   void (*onclose)(void *userdata);
 
@@ -172,12 +172,13 @@ int sctp_is_connected(sctp_t *sctp);
 
 void sctp_incoming_data(sctp_t *sctp, char *buf, size_t len);
 
-int sctp_outgoing_data(sctp_t *sctp, char *buf, size_t len, sctp_data_ppid_t ppid);
+int sctp_outgoing_data(sctp_t *sctp, char *buf, size_t len, uint16_t si, sctp_data_ppid_t ppid);
 
-void sctp_onmessage(sctp_t *sctp, void (*onmessasge)(char *msg, size_t len, void *userdata));
+void sctp_onmessage(sctp_t *sctp, void (*onmessasge)(char *msg, size_t len, uint16_t si, void *userdata));
 
 void sctp_onopen(sctp_t *sctp, void (*onopen)(void *userdata));
 
 void sctp_onclose(sctp_t *sctp, void (*onclose)(void *userdata));
+void sctp_set_userdata(sctp_t *sctp, void *userdata);
 
 #endif // SCTP_H_

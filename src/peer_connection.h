@@ -21,7 +21,7 @@ extern "C" {
 // #include "rtcp_packet.h"
 
 
-#define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
+#define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc); pc->state = curr_state; }
 
 
 typedef enum peer_connection_state {
@@ -155,8 +155,8 @@ void peer_connection_set_cb_track(peer_connection_t *pc, void (*on_track)(uint8_
  * @param[in] callback function when connection is opened
  * @param[in] callback function when connection is closed
  */
-void peer_connection_set_datachannel_cb(peer_connection_t *pc,
- void (*on_messasge)(char *msg, size_t len, void *userdata),
+void peer_connection_set_datachannel_cb(peer_connection_t *pc, void *userdata,
+ void (*on_messasge)(char *msg, size_t len, uint16_t si, void *userdata),
  void (*on_open)(void *userdata),
  void (*on_close)(void *userdata));
 

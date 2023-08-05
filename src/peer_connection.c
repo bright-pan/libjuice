@@ -119,7 +119,7 @@ static inline char *juice_mode_string(agent_mode_t mode) {
 // Agent: on state changed
 static void agent_on_state_changed(juice_agent_t *agent, juice_state_t state, void *user_ptr) {
     peer_connection_t *pc = user_ptr;
-	JLOG_INFO("%s state: %s\n", pc->name, juice_state_to_string(state));
+    JLOG_INFO("%s state: %s\n", pc->name, juice_state_to_string(state));
 
     if (state == JUICE_STATE_CONNECTED) {
         // Agent 1: on connected, send a message
@@ -127,7 +127,7 @@ static void agent_on_state_changed(juice_agent_t *agent, juice_state_t state, vo
         // memset(message, '\0', 64);
         // snprintf(message, 64, "hello from %s", pc->name);
         // juice_send(agent, message, strlen(message));
-		//agent_change_state(pc->juice_agent, JUICE_STATE_HANDSHAKE);
+        //agent_change_state(pc->juice_agent, JUICE_STATE_HANDSHAKE);
         STATE_CHANGED(pc, PEER_CONNECTION_CONNECTING);
     }
 }
@@ -136,16 +136,16 @@ extern void mqtt_candidate_publish(char *sdp_content);
 // Agent: on local candidate gathered
 static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user_ptr) {
     peer_connection_t *pc = user_ptr;
-	// Filter server reflexive candidates
-	// if (strstr(sdp, "host"))
-	// 	return;
+    // Filter server reflexive candidates
+    // if (strstr(sdp, "host"))
+    // 	return;
 
-	JLOG_INFO("%s candidate: %s", pc->name, sdp);
+    JLOG_INFO("%s candidate: %s", pc->name, sdp);
 
     mqtt_candidate_publish((char *)&sdp[2]);
     // sdp_append(&pc->local_sdp, sdp);
-	// Agent: Receive it from agent
-	// juice_add_remote_candidate(agent, sdp);
+    // Agent: Receive it from agent
+    // juice_add_remote_candidate(agent, sdp);
 }
 
 // Agent: on local candidates gathering done
@@ -153,7 +153,7 @@ static void agent_on_gathering_done(juice_agent_t *agent, void *user_ptr) {
     peer_connection_t *pc = user_ptr;
     // juice_get_local_description(pc->juice_agent, pc->local_sdp.content, JUICE_MAX_SDP_STRING_LEN);
     JLOG_INFO("%s gathering done:\n%s\n", pc->name, pc->local_sdp.content);
-	juice_set_remote_gathering_done(agent); // optional
+    juice_set_remote_gathering_done(agent); // optional
 }
 
 // Agent on message received
@@ -205,23 +205,23 @@ void peer_options_set_default(peer_options_t *options, int port_begin, int port_
     turn_server.username = TURN_SERVER_USERNAME;
     turn_server.password = TURN_SERVER_PASSWORD;
 
-	// Agent: Create config
-	juice_config_t *config = &options->juice_config;
-	memset(config, 0, sizeof(juice_config_t));
-	// Concurrency
-	config->concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
-	// TURN server
-	config->turn_servers = &turn_server;
-	config->turn_servers_count = 1;
-	// Bind address
-	config->bind_address = BIND_ADDRESS;
-	config->local_port_range_begin = port_begin;
-	config->local_port_range_end = port_end;
-	// Callback
-	config->cb_state_changed = agent_on_state_changed;
-	config->cb_candidate = agent_on_candidate;
-	config->cb_gathering_done = agent_on_gathering_done;
-	config->cb_recv = agent_on_recv;
+    // Agent: Create config
+    juice_config_t *config = &options->juice_config;
+    memset(config, 0, sizeof(juice_config_t));
+    // Concurrency
+    config->concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
+    // TURN server
+    config->turn_servers = &turn_server;
+    config->turn_servers_count = 1;
+    // Bind address
+    config->bind_address = BIND_ADDRESS;
+    config->local_port_range_begin = port_begin;
+    config->local_port_range_end = port_end;
+    // Callback
+    config->cb_state_changed = agent_on_state_changed;
+    config->cb_candidate = agent_on_candidate;
+    config->cb_gathering_done = agent_on_gathering_done;
+    config->cb_recv = agent_on_recv;
 }
 
 void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role_t role, peer_options_t *options) {
@@ -256,8 +256,8 @@ static void peer_connection_state_start(peer_connection_t *pc) {
 
     pc->sctp.connected = 0;
 
-	juice_gather_candidates(pc->juice_agent);
-	juice_get_local_description(pc->juice_agent, description, SDP_CONTENT_LENGTH);
+    juice_gather_candidates(pc->juice_agent);
+    juice_get_local_description(pc->juice_agent, description, SDP_CONTENT_LENGTH);
 
     sdp_reset(&pc->local_sdp);
     // // TODO: check if we have video or audio codecs
@@ -297,8 +297,8 @@ static void peer_connection_state_start(peer_connection_t *pc) {
         }
         strcat(pc->local_sdp.content, description);
     }
-    
-	JLOG_INFO("%s local description:\n%s\n", pc->name, pc->local_sdp.content);
+
+    JLOG_INFO("%s local description:\n%s\n", pc->name, pc->local_sdp.content);
     mqtt_answer_publish(pc->local_sdp.content);
     pc->b_offer_created = 1;
 
@@ -609,17 +609,17 @@ void peer_connection_set_cb_track(peer_connection_t *pc, void (*on_track)(uint8_
   pc->cb_track = on_track;
 }
 
-void peer_connection_set_datachannel_cb(peer_connection_t *pc,
- void (*on_messasge)(char *msg, size_t len, void *userdata),
- void (*on_open)(void *userdata),
- void (*on_close)(void *userdata)) {
+void peer_connection_set_datachannel_cb(peer_connection_t *pc, void *userdata,
+    void (*on_messasge)(char *msg, size_t len, uint16_t si, void *userdata),
+    void (*on_open)(void *userdata),
+    void (*on_close)(void *userdata)) {
 
-  if (pc) {
-
-    sctp_onopen(&pc->sctp, on_open);
-    sctp_onclose(&pc->sctp, on_close);
-    sctp_onmessage(&pc->sctp, on_messasge);
-  }
+    if (pc) {
+        sctp_onopen(&pc->sctp, on_open);
+        sctp_onclose(&pc->sctp, on_close);
+        sctp_onmessage(&pc->sctp, on_messasge);
+        sctp_set_userdata(&pc->sctp, userdata);
+    }
 }
 
 void peer_connection_set_current_ip(const char *ip) {
