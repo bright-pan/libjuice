@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<!--
+ *  Copyright (c) 2022 The WebRTC project authors. All Rights Reserved.
+ *
+ *  Use of this source code is governed by a BSD-style license
+ *  that can be found in the LICENSE file in the root of the source
+ *  tree.
+-->
+<html>
+
+<head>
+
+    <meta charset="utf-8">
+    <meta name="description" content="WebRTC code samples">
+    <meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1, maximum-scale=1">
+    <meta itemprop="description" content="Client-side WebRTC code samples">
+    <meta itemprop="image" content="../../../images/webrtc-icon-192x192.png">
+    <meta itemprop="name" content="WebRTC code samples">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta id="theme-color" name="theme-color" content="#ffffff">
+
+    <base target="_blank">
+
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <title>Transmit text (between two tabs)</title>
+    <style>
+        #buttons {
+          position:relative;
+          float:left;
+        }
+        textarea {
+          width: 400px;
+        }
+        #player {
+          position:relative;
+          width: 640px;
+          height:480px;
+          /* float:right; */
+        }
+        #mainvideo {
+          position:absolute;
+          top:0;
+          left:0;
+          z-index:0;
+        }
+        #localvideo {
+          position:absolute;
+          top:0;
+          left:0;
+          z-index:1;
+        }
+        .hidden
+        {
+          display: none;
+        }
+      </style>
+</head>
+
+<body>
+
+    <div id="container">
+
+        <h1>WebRTC Transmit text</h1>
+        <div id="buttons">
+            <div id="player">
+                <video tabindex="0" id="remotevideo" class="mainvideo" controls="controls" height="480" width="640" muted=""></video>
+                <video tabindex="0" id="localvideo" controls="controls" height="120" width="160" muted=""></video></div>
+            </div>
+            <div>
+                <button id="initButton">本地初始化</button>
+                <button id="startButton" disabled>远程呼叫</button>
+                <button id="closeButton" disabled>停止</button>
+                <button id="sendButton" disabled>发送</button>
+                <button id="switchButton">ID互换</button>
+
+            </div>
+            <div>
+                <h3>LOCAL ID</h3>
+                <textarea id="local_id"></textarea>
+            </div>
+            <div>
+                <h3>REMOTE ID</h3>
+                <textarea id="remote_id"></textarea>
+            </div>
+
+            <div id="sendReceive">
+                <div id="send">
+                    <h2>Send</h2>
+                    <textarea id="dataChannelSend" disabled placeholder="请输入要发送得文本...."></textarea>
+                </div>
+                <div id="receive">
+                    <h2>Receive</h2>
+                    <textarea id="dataChannelReceive" disabled></textarea>
+                </div>
+            </div>
+        </div>
+
+        <script>
+
+            // const clientId = 'mqtt_' + Math.random().toString(16).substr(2, 8)
+            let remotevideo = document.getElementById("remotevideo");
+            remotevideo.onplay = function() {console.log("Play for remotevideo");};
+            let localvideo = document.getElementById("localvideo");
+            localvideo.onplay = function() {console.log("Play for localvideo");};
+
+
+            local_view = document.getElementById('local_id');
+            local_view.value = "mqttjs_3f770906"
+            remote_view = document.getElementById('remote_id');
+            remote_view.value = "mqttjs_bd853a81"
+
+            const host = 'ws://broker.emqx.io:8083/mqtt'
+            const webrtc_topic_prefix = '/webrtc/'
+
+            const configuration = {
+                // sdpSemantics: 'plan-b',
+                // bundlePolicy: 'max-compat',
+                // rtcpMuxPolicy: 'negotiate',
+                iceServers: [{
+                    // url: 'turn:test.funlink.cloud:3478',
+                    url: 'turn:192.168.1.186:3478',
+                    username: 'username1',
+                    credential: 'password1'
+                }]
+                // iceServers: [
+                //         {
+                //             urls: "stun:stun.relay.metered.ca:80",
+                //         },
+                //         {
+                //             urls: "turn:a.relay.metered.ca:80",
+                //             username: "582e76da4d1dca59a632a28c",
+                //             credential: "8spay3NSF+9uslHA",
+                //         },
+                //         {
+                //             urls: "turn:a.relay.metered.ca:80?transport=tcp",
+                //             username: "582e76da4d1dca59a632a28c",
+                //             credential: "8spay3NSF+9uslHA",
+                //         },
+                //         {
+                //             urls: "turn:a.relay.metered.ca:443",
+                //             username: "582e76da4d1dca59a632a28c",
+                //             credential: "8spay3NSF+9uslHA",
+                //         },
+                //         {
+                //             urls: "turn:a.relay.metered.ca:443?transport=tcp",
+                //             username: "582e76da4d1dca59a632a28c",
+                //             credential: "8spay3NSF+9uslHA",
+                //         },
+                //     ]
+            };
+
+            let client = null;
+
+            function remote_PostMessage(m) {
+                client.publish(webrtc_topic_prefix + remote_view.value, JSON.stringify(m), { qos: 0, retain: false })
+            }
+
+            const initButton = document.getElementById('initButton');
+            const switchButton = document.getElementById('switchButton');
+            const startButton = document.getElementById('startButton');
+            const closeButton = document.getElementById('closeButton');
+            const sendButton = document.getElementById('sendButton');
+
+            sendButton.onclick = sendData;
+
+            const dataChannelSend = document.querySelector('textarea#dataChannelSend');
+            const dataChannelReceive = document.querySelector('textarea#dataChannelReceive');
+
+            let pc;
+            let sendChannel;
+            let receiveChannel;
+            const constraints = window.constraints = {
+                audio: false,
+                video: true
+            };
+            let localstream;
+
+            initButton.onclick = async () => {
+                initButton.disabled = true;
+                startButton.disabled = false;
+                const options = {
+                    keepalive: 30,
+                    clientId: local_view.value,
+                    protocolId: 'MQTT',
+                    protocolVersion: 4,
+                    clean: true,
+                    reconnectPeriod: 1000,
+                    connectTimeout: 30 * 1000,
+                    will: {
+                        topic: 'WillMsg',
+                        payload: 'Connection Closed abnormally..!',
+                        qos: 0,
+                        retain: false
+                    },
+                    rejectUnauthorized: false
+                }
+
+                console.log('connecting mqtt client')
+                client = mqtt.connect(host, options)
+
+                client.on('error', (err) => {
+                    console.log('Connection error: ', err)
+                    client.end()
+                })
+
+                client.on('reconnect', () => {
+                    console.log('Reconnecting...')
+                })
+
+                client.on('connect', () => {
+                    console.log(local_view.value + ' connected mqtt:' + host)
+                    client.subscribe(webrtc_topic_prefix + local_view.value, { qos: 0 })
+                    console.log('subscribe: ' + webrtc_topic_prefix + local_view.value)
+                })
+
+                client.on('message', (topic, message, packet) => {
+                    console.log('Received Message: ' + message.toString() + '\nOn topic: ' + topic)
+                    obj = JSON.parse(message.toString());
+                    switch (obj.type) {
+                        case 'offer':
+                            handleOffer(obj);
+                            break;
+                        case 'answer':
+                            handleAnswer(obj);
+                            break;
+                        case 'candidate':
+                            handleCandidate(obj);
+                            break;
+                        case 'ready':
+                            // A second tab joined. This tab will enable the start button unless in a call already.
+                            if (pc) {
+                                console.log('already in call, ignoring');
+                                return;
+                            }
+                            startButton.disabled = false;
+                            break;
+                        case 'bye':
+                            if (pc) {
+                                hangup();
+                            }
+                            break;
+                        default:
+                            console.log('unhandled', e);
+                            break;
+                    }
+                })
+
+                client.on('close', () => {
+                    console.log(local_view.value + ' disconnected')
+                })
+                
+                await createPeerConnection();
+                localstream = await navigator.mediaDevices.getUserMedia(constraints);
+                localvideo.srcObject = localstream;
+                localvideo.play();
+                pc.addStream(localstream);
+            };
+
+            switchButton.onclick = async () => {
+                var value = local_view.value
+                local_view.value = remote_view.value
+                remote_view.value = value
+            };
+
+            startButton.onclick = async () => {
+                startButton.disabled = true;
+                closeButton.disabled = false;
+
+                // await createPeerConnection();
+                sendChannel = pc.createDataChannel('sendDataChannel');
+                sendChannel.onopen = onSendChannelStateChange;
+                sendChannel.onmessage = onSendChannelMessageCallback;
+                sendChannel.onclose = onSendChannelStateChange;
+                const offer = await pc.createOffer();
+                remote_PostMessage({ type: 'offer', sdp: offer.sdp });
+                await pc.setLocalDescription(offer);
+            };
+
+            closeButton.onclick = async () => {
+                hangup();
+                remote_PostMessage({ type: 'bye' });
+            };
+
+            async function hangup() {
+                if (pc) {
+                    pc.close();
+                    pc = null;
+                }
+                sendChannel = null;
+                receiveChannel = null;
+                console.log('Closed peer connections');
+                startButton.disabled = false;
+                sendButton.disabled = true;
+                closeButton.disabled = true;
+                dataChannelSend.value = '';
+                dataChannelReceive.value = '';
+                dataChannelSend.disabled = true;
+            };
+            function createPeerConnection() {
+                pc = new RTCPeerConnection(configuration);
+                pc.onicecandidate = e => {
+                    const message = {
+                        type: 'candidate',
+                        candidate: null,
+                    };
+                    if (e.candidate) {
+                        message.candidate = e.candidate.candidate;
+                        message.sdpMid = e.candidate.sdpMid;
+                        message.sdpMLineIndex = e.candidate.sdpMLineIndex;
+                    }
+                    remote_PostMessage(message);
+                };
+                // pc.ontrack = handleRemoteVideo;
+                pc.ontrack = (e) => {
+                    remotevideo.srcObject = e.streams[0];
+                    remotevideo.play();
+                    // hangupButton.disabled = false;
+                    // return false;
+                };
+            }
+
+            async function handleOffer(offer) {
+                // if (pc) {
+                //     console.error('existing peerconnection');
+                //     return;
+                // }
+                // await createPeerConnection();
+                pc.ondatachannel = receiveChannelCallback;
+                await pc.setRemoteDescription(offer);
+                const answer = await pc.createAnswer();
+                remote_PostMessage({ type: 'answer', sdp: answer.sdp });
+                await pc.setLocalDescription(answer);
+            }
+
+            async function handleAnswer(answer) {
+                if (!pc) {
+                    console.error('no peerconnection');
+                    return;
+                }
+                await pc.setRemoteDescription(answer);
+            }
+
+            async function handleCandidate(candidate) {
+                if (!pc) {
+                    console.error('no peerconnection');
+                    return;
+                }
+                if (!candidate.candidate) {
+                    await pc.addIceCandidate(null);
+                } else {
+                    await pc.addIceCandidate(candidate);
+                }
+            }
+
+            function sendData() {
+                const data = dataChannelSend.value;
+                if (sendChannel) {
+                    sendChannel.send(data);
+                } else {
+                    receiveChannel.send(data);
+                }
+                console.log('Sent Data: ' + data);
+            }
+
+            function receiveChannelCallback(event) {
+                console.log('Receive Channel Callback');
+                receiveChannel = event.channel;
+                receiveChannel.onmessage = onReceiveChannelMessageCallback;
+                receiveChannel.onopen = onReceiveChannelStateChange;
+                receiveChannel.onclose = onReceiveChannelStateChange;
+            }
+
+            function onReceiveChannelMessageCallback(event) {
+                console.log('Received Message' + event.data);
+                dataChannelReceive.value = event.data;
+            }
+
+            function onSendChannelMessageCallback(event) {
+                console.log('Received Message' + event.data);
+                dataChannelReceive.value = event.data;
+            }
+
+            function onSendChannelStateChange() {
+                const readyState = sendChannel.readyState;
+                console.log('Send channel state is: ' + readyState);
+                if (readyState === 'open') {
+                    dataChannelSend.disabled = false;
+                    dataChannelSend.focus();
+                    sendButton.disabled = false;
+                    startButton.disabled = true;
+                    closeButton.disabled = false;
+                } else {
+                    dataChannelSend.disabled = true;
+                    sendButton.disabled = true;
+                    startButton.disabled = false;
+                    closeButton.disabled = true;
+                }
+            }
+
+            function onReceiveChannelStateChange() {
+                const readyState = receiveChannel.readyState;
+                console.log(`Receive channel state is: ${readyState}`);
+                if (readyState === 'open') {
+                    dataChannelSend.disabled = false;
+                    sendButton.disabled = false;
+                    closeButton.disabled = false;
+                } else {
+                    dataChannelSend.disabled = true;
+                    sendButton.disabled = true;
+                    closeButton.disabled = true;
+                }
+            }
+
+        </script>
+</body>
+
+</html>

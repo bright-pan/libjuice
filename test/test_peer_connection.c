@@ -46,8 +46,8 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s state xxx\n", argv[0]);
         JLOG_ERROR("Usage: %s handshake\n", argv[0]);
         JLOG_ERROR("Usage: %s send raw|dtls message\n", argv[0]);
-        JLOG_ERROR("Usage: %s send ch message\n", argv[0]);
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
+        JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
         return;
     }
     peer_connection_set_datachannel_cb(pc, pc, on_channel_msg, on_channel_open, on_channel_close);
@@ -157,8 +157,8 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s state xxx\n", argv[0]);
         JLOG_ERROR("Usage: %s handshake\n", argv[0]);
         JLOG_ERROR("Usage: %s send raw|dtls message\n", argv[0]);
-        JLOG_ERROR("Usage: %s send ch message\n", argv[0]);
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
+        JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
     }
 }
 
