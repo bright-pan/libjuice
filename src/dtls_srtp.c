@@ -607,22 +607,22 @@ int dtls_srtp_validate(unsigned char *buf) {
     return ((*buf >= 20) && (*buf <= 64));
 }
 
-void dtls_srtp_decrypt_rtp_packet(dtls_srtp_t *dtls_srtp, unsigned char *packet, int *bytes) {
+void dtls_srtp_decrypt_rtp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
     srtp_unprotect(dtls_srtp->srtp_in, packet, bytes);
 }
 
-void dtls_srtp_decrypt_rtcp_packet(dtls_srtp_t *dtls_srtp, unsigned char *packet, int *bytes) {
+void dtls_srtp_decrypt_rtcp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
     srtp_unprotect_rtcp(dtls_srtp->srtp_in, packet, bytes);
 }
 
-void dtls_srtp_encrypt_rtp_packet(dtls_srtp_t *dtls_srtp, unsigned char *packet, int *bytes) {
+void dtls_srtp_encrypt_rtp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
     srtp_protect(dtls_srtp->srtp_out, packet, bytes);
 }
 
-void dtls_srtp_encrypt_rctp_packet(dtls_srtp_t *dtls_srtp, unsigned char *packet, int *bytes) {
+void dtls_srtp_encrypt_rctp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
     srtp_protect_rtcp(dtls_srtp->srtp_out, packet, bytes);
 }

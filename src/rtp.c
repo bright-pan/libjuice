@@ -186,19 +186,19 @@ void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, 
 
     switch (codec) {
 
-        case CODEC_H264:
-            rtp_packetizer->type = PT_H264;
-            rtp_packetizer->ssrc = SSRC_H264;
+        case MEDIA_CODEC_H264:
+            rtp_packetizer->type = RTP_PAYLOAD_TYPE_H264;
+            rtp_packetizer->ssrc = RTP_SSRC_TYPE_H264;
             rtp_packetizer->encode_func = rtp_packetizer_encode_h264;
             break;
-        case CODEC_PCMA:
-            rtp_packetizer->type = PT_PCMA;
-            rtp_packetizer->ssrc = SSRC_PCMA;
+        case MEDIA_CODEC_PCMA:
+            rtp_packetizer->type = RTP_PAYLOAD_TYPE_PCMA;
+            rtp_packetizer->ssrc = RTP_SSRC_TYPE_PCMA;
             rtp_packetizer->encode_func = rtp_packetizer_encode_generic;
             break;
-        case CODEC_PCMU:
-            rtp_packetizer->type = PT_PCMU;
-            rtp_packetizer->ssrc = SSRC_PCMU;
+        case MEDIA_CODEC_PCMU:
+            rtp_packetizer->type = RTP_PAYLOAD_TYPE_PCMU;
+            rtp_packetizer->ssrc = RTP_SSRC_TYPE_PCMU;
             rtp_packetizer->encode_func = rtp_packetizer_encode_generic;
             break;
         default:
@@ -206,7 +206,7 @@ void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, 
     }
 }
 
-int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
+int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, void *buf, size_t size) {
 
     return rtp_packetizer->encode_func(rtp_packetizer, buf, size);
 }

@@ -26,16 +26,18 @@ void sdp_reset(sdp_t *sdp) { memset(sdp->content, 0, sizeof(sdp->content)); }
 
 void sdp_append_h264(sdp_t *sdp) {
 
-    sdp_append(sdp, "m=video 9 UDP/TLS/RTP/SAVPF 96 102");
+    sdp_append(sdp, "m=video 9 UDP/TLS/RTP/SAVPF 102 104");
+    sdp_append(sdp, "a=rtpmap:102 H264/90000");
     sdp_append(sdp, "a=rtcp-fb:102 nack");
     sdp_append(sdp, "a=rtcp-fb:102 nack pli");
-    sdp_append(sdp, "a=fmtp:96 profile-level-id=42e01f;level-asymmetry-allowed=1");
     sdp_append(sdp, "a=fmtp:102 profile-level-id=42e01f;packetization-mode=1;level-asymmetry-allowed=1");
-    sdp_append(sdp, "a=rtpmap:96 H264/90000");
-    sdp_append(sdp, "a=rtpmap:102 H264/90000");
+    sdp_append(sdp, "a=rtpmap:104 H264/90000");
+    sdp_append(sdp, "a=rtcp-fb:104 nack");
+    sdp_append(sdp, "a=rtcp-fb:104 nack pli");
+    sdp_append(sdp, "a=fmtp:104 profile-level-id=42e01f;packetization-mode=0;level-asymmetry-allowed=1");
     sdp_append(sdp, "a=ssrc:1 cname:webrtc-h264");
     sdp_append(sdp, "a=sendrecv");
-    sdp_append(sdp, "a=mid:1");
+    sdp_append(sdp, "a=mid:0");
     sdp_append(sdp, "c=IN IP4 0.0.0.0");
     sdp_append(sdp, "a=rtcp-mux");
 }
@@ -65,7 +67,7 @@ void sdp_append_pcmu(sdp_t *sdp) {
 void sdp_append_datachannel(sdp_t *sdp) {
 
     sdp_append(sdp, "m=application 9 UDP/DTLS/SCTP webrtc-datachannel");
-    sdp_append(sdp, "a=mid:0");
+    sdp_append(sdp, "a=mid:1");
     sdp_append(sdp, "a=sctp-port:5000");
     sdp_append(sdp, "c=IN IP4 0.0.0.0");
     sdp_append(sdp, "a=max-message-size:262144");
@@ -84,11 +86,11 @@ void sdp_create(sdp_t *sdp, int b_video, int b_audio, int b_datachannel) {
 
     strcat(bundle, "a=group:BUNDLE");
 
-    if (b_datachannel) {
+    if (b_video) {
         strcat(bundle, " 0");
     }
 
-    if (b_video) {
+    if (b_datachannel) {
         strcat(bundle, " 1");
     }
 

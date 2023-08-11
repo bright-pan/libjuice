@@ -17,7 +17,7 @@ extern "C" {
 #include "sdp.h"
 #include "codec.h"
 // #include "config.h"
-// #include "rtp.h"
+#include "rtp.h"
 // #include "rtcp_packet.h"
 
 
@@ -40,14 +40,6 @@ typedef struct peer_options {
     media_codec_t audio_codec;
     media_codec_t video_codec;
     int datachannel;
-  
-#ifdef HAVE_GST
-  const char *audio_outgoing_pipeline;
-  const char *audio_incoming_pipeline;
-  const char *video_outgoing_pipeline;
-  const char *video_incoming_pipeline;
-#endif
-
 } peer_options_t;
 
 typedef struct peer_connect {
@@ -76,25 +68,23 @@ typedef struct peer_connect {
     void *user_data;
 
     // uint8_t temp_buf[CONFIG_MTU];
-    packet_fifo_t dtls_fifo;
-    packet_fifo_t rtp_fifo;
-    packet_fifo_t other_fifo;
+    packet_fifo_t dtls_fifo; //recv dtls
+    packet_fifo_t rtp_fifo; //recv rtp
+    packet_fifo_t other_fifo; // recv other
     // uint8_t agent_buf[CONFIG_MTU];
     // int agent_ret;
     int b_offer_created;
 
+    packet_fifo_t audio_fifo; //send audio
+    packet_fifo_t video_fifo; //send video
+    packet_fifo_t data_fifo; //send data
     // Buffer *audio_rb[2];
     // Buffer *video_rb[2];
     // Buffer *data_rb[2];
     void (*loop)(void *param);
 
-    #ifdef HAVE_GST
-    MediaStream *audio_stream;
-    MediaStream *video_stream;
-    #else
-    // RtpPacketizer audio_packetizer;
-    // RtpPacketizer video_packetizer;
-    #endif
+    rtp_packetizer_t audio_packetizer;
+    rtp_packetizer_t video_packetizer;
 
 } peer_connection_t;
 
@@ -166,10 +156,10 @@ void peer_connection_set_datachannel_cb(peer_connection_t *pc, void *userdata,
  * @param[in] message buffer
  * @param[in] length of message
  */
-int peer_connection_datachannel_send(peer_connection_t *pc, char *message, size_t len);
+int peer_connection_datachannel_send(peer_connection_t *pc, uint16_t si, char *message, size_t len);
 int peer_connection_datachannel_send_binary(peer_connection_t *pc, char *message, size_t len);
 
-int peer_connection_send_rtp_packet(peer_connection_t *pc, uint8_t *packet, int bytes);
+int peer_connection_send_rtp_packet(peer_connection_t *pc, char *packet, int bytes);
 
 void peer_connection_set_host_address(peer_connection_t *pc, const char *host);
 
@@ -181,6 +171,7 @@ void peer_connection_set_current_ip(const char *ip);
 
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end);
 
+void peer_connection_reset_video_fifo(peer_connection_t *pc);
 #ifdef __cplusplus
 }
 #endif

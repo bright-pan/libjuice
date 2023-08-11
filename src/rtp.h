@@ -8,20 +8,20 @@
 
 typedef enum {
 
-    PT_PCMU = 0,
-    PT_PCMA = 8,
-    PT_G722 = 9,
-    PT_H264 = 96,
-    PT_OPUS = 111
+    RTP_PAYLOAD_TYPE_PCMU = 0,
+    RTP_PAYLOAD_TYPE_PCMA = 8,
+    RTP_PAYLOAD_TYPE_G722 = 9,
+    RTP_PAYLOAD_TYPE_H264 = 104,
+    RTP_PAYLOAD_TYPE_OPUS = 111
 
 } rtp_payload_type_t;
 
 typedef enum {
 
-    SSRC_H264 = 1,
-    SSRC_PCMA = 4,
-    SSRC_PCMU = 5,
-    SSRC_OPUS = 6,
+    RTP_SSRC_TYPE_H264 = 1,
+    RTP_SSRC_TYPE_PCMA = 4,
+    RTP_SSRC_TYPE_PCMU = 5,
+    RTP_SSRC_TYPE_OPUS = 6,
 
 } rtp_ssrc_type_t;
 
@@ -83,6 +83,6 @@ void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec,
                          void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data),
                          void *user_data);
 
-int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size);
+int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, void *buf, size_t size);
 
 #endif // RTP_H_

@@ -13,20 +13,11 @@
 // Turn server config
 static juice_turn_server_t turn_server;
 
-/*
-static void peer_connection_set_cb_rtp_packet(const uint8_t *packet, size_t bytes, void *user_data) {
+static void peer_connection_set_cb_rtp_packet(uint8_t *packet, size_t bytes, void *user_data) {
 
-  // Buffer **rb = (Buffer**) user_data;
-
-  // if (rb) {
-
-  //   if (utils_buffer_push(rb[1], packet, bytes) == bytes) {
-
-  //     utils_buffer_push(rb[0], (uint8_t*)&bytes, sizeof(bytes));
-  //   }
-  // }
+    packet_fifo_t *fifo = (packet_fifo_t *)user_data;
+    packet_fifo_write(fifo, (char *)packet, bytes);
 }
-*/
 #define PER_TIMEOUT 100 //ms
 
 #define TIMEOUT_COUNT(timeout, per) (((timeout) / (per)) ? ((timeout) / (per)) : 1)
@@ -230,8 +221,8 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->name = name;
     pc->role = role;
     pc->stack_size = 100*1024;
-    pc->options.video_codec = CODEC_NONE;
-    pc->options.audio_codec = CODEC_NONE;
+    pc->options.video_codec = MEDIA_CODEC_H264;
+    pc->options.audio_codec = MEDIA_CODEC_NONE;
     pc->options.datachannel = 1;
 }
 
@@ -244,8 +235,8 @@ extern void mqtt_answer_publish(char *sdp_content);
 
 static void peer_connection_state_start(peer_connection_t *pc) {
 
-    int b_video = pc->options.video_codec != CODEC_NONE;
-    int b_audio = pc->options.audio_codec != CODEC_NONE;
+    int b_video = pc->options.video_codec != MEDIA_CODEC_NONE;
+    int b_audio = pc->options.audio_codec != MEDIA_CODEC_NONE;
     int b_datachannel = pc->options.datachannel;
     char description[SDP_CONTENT_LENGTH];
     memset(description, '\0', SDP_CONTENT_LENGTH);
@@ -263,21 +254,10 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     // // TODO: check if we have video or audio codecs
     sdp_create(&pc->local_sdp, b_video, b_audio, b_datachannel);
 
-    if (pc->options.video_codec == CODEC_H264) {
+
+    if (pc->options.video_codec == MEDIA_CODEC_H264) {
 
         sdp_append_h264(&pc->local_sdp);
-        sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
-        if (pc->role == DTLS_SRTP_ROLE_SERVER) {
-            sdp_append(&pc->local_sdp, "a=setup:actpass");
-        } else {
-            sdp_append(&pc->local_sdp, "a=setup:active");
-        }
-        strcat(pc->local_sdp.content, description);
-    }
-
-    if (pc->options.audio_codec == CODEC_PCMA) {
-
-        sdp_append_pcma(&pc->local_sdp);
         sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
         if (pc->role == DTLS_SRTP_ROLE_SERVER) {
             sdp_append(&pc->local_sdp, "a=setup:actpass");
@@ -298,6 +278,18 @@ static void peer_connection_state_start(peer_connection_t *pc) {
         strcat(pc->local_sdp.content, description);
     }
 
+    if (pc->options.audio_codec == MEDIA_CODEC_PCMA) {
+
+        sdp_append_pcma(&pc->local_sdp);
+        sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
+        if (pc->role == DTLS_SRTP_ROLE_SERVER) {
+            sdp_append(&pc->local_sdp, "a=setup:actpass");
+        } else {
+            sdp_append(&pc->local_sdp, "a=setup:active");
+        }
+        strcat(pc->local_sdp.content, description);
+    }
+
     JLOG_INFO("%s local description:\n%s\n", pc->name, pc->local_sdp.content);
     mqtt_answer_publish(pc->local_sdp.content);
     pc->b_offer_created = 1;
@@ -305,7 +297,7 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     if (pc->cb_candidate) {
         pc->cb_candidate(pc->local_sdp.content, pc->user_data);
     }
-                    
+
     packet_fifo_reset(&pc->dtls_fifo);
     packet_fifo_reset(&pc->other_fifo);
     packet_fifo_reset(&pc->rtp_fifo);
@@ -421,10 +413,21 @@ void peer_connection_loop(void *param) {
             //   }
             break;
             case PEER_CONNECTION_COMPLETED: {
+                //recv fifo
                 char buf[4096];
                 int recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
                 if (recv_count > 0) {
                     sctp_incoming_data(&pc->sctp, buf, recv_count);
+                }
+                //send fifo
+                while (1) {
+                    recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
+                    if (recv_count > 0) {
+                        peer_connection_send_rtp_packet(pc, buf, recv_count);
+                    } else {
+                        // no data
+                        break;
+                    }
                 }
                 break;
             }
@@ -441,22 +444,24 @@ void peer_connection_loop(void *param) {
     }
 }
 
+void peer_connection_reset_video_fifo(peer_connection_t *pc) {
+    packet_fifo_reset(&pc->video_fifo);
+}
+
 void peer_connection_init(peer_connection_t *pc) {
 
 //   uint32_t ssrc;
 //   RtpPayloadType type;
 
-// #ifdef HAVE_GST
-//   gst_init(NULL, NULL);
-// #endif
-
-//   pc->juice_agent.mode = AGENT_MODE_CONTROLLED;
-
-    //rtc_fifo_init(&pc->msg_fifo, 64, sizeof(recv_packet_t)); //blk size == 1 for bytes fifo
+    // recv fifo
     packet_fifo_init(&pc->rtp_fifo);
     packet_fifo_init(&pc->dtls_fifo);
     packet_fifo_init(&pc->other_fifo);
-//   memset(&pc->sctp, 0, sizeof(pc->sctp));
+    // send fifo
+    packet_fifo_init(&pc->video_fifo);
+    packet_fifo_init(&pc->audio_fifo);
+    packet_fifo_init(&pc->data_fifo);
+    //   memset(&pc->sctp, 0, sizeof(pc->sctp));
     if (pc->role == DTLS_SRTP_ROLE_SERVER) {
         pc->recv_timeout = 1000*10;
     } else {
@@ -469,13 +474,6 @@ void peer_connection_init(peer_connection_t *pc) {
     pc->dtls_srtp.udp_send = (mbedtls_ssl_send_t *)peer_connection_dtls_send;
     pc->loop = peer_connection_loop;
 
-    peer_connection_loop_run(pc);
-//   pc->video_rb[0] = utils_buffer_new(VIDEO_RB_SIZE_LENGTH);
-//   pc->video_rb[1] = utils_buffer_new(VIDEO_RB_DATA_LENGTH);
-//   pc->audio_rb[0] = utils_buffer_new(AUDIO_RB_SIZE_LENGTH);
-//   pc->audio_rb[1] = utils_buffer_new(AUDIO_RB_DATA_LENGTH);
-//   pc->data_rb[0] = utils_buffer_new(DATA_RB_SIZE_LENGTH);
-//   pc->data_rb[1] = utils_buffer_new(DATA_RB_DATA_LENGTH);
 
 //   if (pc->options.audio_codec) {
 // #ifdef HAVE_GST
@@ -488,17 +486,18 @@ void peer_connection_init(peer_connection_t *pc) {
 // #endif
 //   }
 
-//   if (pc->options.video_codec) {
-// #ifdef HAVE_GST
-//     pc->video_stream = media_stream_create(pc->options.video_codec,
-//      pc->options.video_outgoing_pipeline, pc->options.video_incoming_pipeline);
-//     pc->video_stream->outgoing_rb = pc->video_rb;
-// #else
-//     rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
-//      peer_connection_set_cb_rtp_packet, pc->video_rb);
-// #endif
-//   }
+    if (pc->options.video_codec) {
+    #ifdef HAVE_GST
+        pc->video_stream = media_stream_create(pc->options.video_codec,
+        pc->options.video_outgoing_pipeline, pc->options.video_incoming_pipeline);
+        pc->video_stream->outgoing_rb = pc->video_rb;
+    #else
+        rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
+        peer_connection_set_cb_rtp_packet, &pc->video_fifo);
+    #endif
+    }
 
+    peer_connection_loop_run(pc);
 }
 
 int peer_connection_send_audio(peer_connection_t *pc, const uint8_t *buf, size_t len) {
@@ -511,23 +510,22 @@ int peer_connection_send_audio(peer_connection_t *pc, const uint8_t *buf, size_t
 }
 
 int peer_connection_send_video(peer_connection_t *pc, const uint8_t *buf, size_t len) {
-// #ifndef HAVE_GST
-//   if (pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
-//     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)buf, len);
-//   }
-// #endif
-  return 0;
+    int ret = -1; 
+    if (pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
+        ret = rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)buf, len);
+    } else {
+        JLOG_ERROR("dtls srtp not connected");
+    }
+    return ret;
 }
 
-int peer_connection_datachannel_send(peer_connection_t *pc, char *message, size_t len) {
+int peer_connection_datachannel_send(peer_connection_t *pc, uint16_t si, char *message,size_t len) {
 
-//   if(!sctp_is_connected(&pc->sctp)) {
-//     LOGE("sctp not connected");
-//     return -1;
-//   }
-
-//   return sctp_outgoing_data(&pc->sctp, message, len, PPID_STRING);
-return 0;
+    if(!sctp_is_connected(&pc->sctp)) {
+        JLOG_ERROR("sctp not connected");
+        return -1;
+    }
+    return sctp_outgoing_data(&pc->sctp, message, len, si, PPID_STRING);
 }
 
 int peer_connection_datachannel_send_binary(peer_connection_t *pc, char *message, size_t len) {
@@ -558,12 +556,15 @@ void peer_connection_start(peer_connection_t *pc) {
   // pc->b_offer_created = 0;
 }
 
-int peer_connection_send_rtp_packet(peer_connection_t *pc, uint8_t *packet, int bytes) {
-
-  // dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, packet, &bytes);
-
-  // return agent_send(pc->juice_agent, packet, bytes);
-  return 0;
+int peer_connection_send_rtp_packet(peer_connection_t *pc, char *packet, int bytes) {
+    int len;
+    dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &len);
+    int ret = juice_send(pc->juice_agent, packet, len);
+    if (ret == JUICE_ERR_SUCCESS) {
+        return bytes;
+    } else {
+        return -1;
+    }
 }
 
 int peer_connection_send_rtcp_pil(peer_connection_t *pc, uint32_t ssrc) {

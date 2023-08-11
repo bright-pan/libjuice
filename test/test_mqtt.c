@@ -32,6 +32,7 @@
 #define MQTT_WILLMSG            "Goodbye!"
 
 /* define MQTT client context */
+#define MQTT_CLIENT_BUF_SIZE SDP_CONTENT_LENGTH
 static MQTTClient client;
 static int is_started = 0;
 static char cmd_buf[SDP_CONTENT_LENGTH];
@@ -169,7 +170,7 @@ static int mqtt_start(int argc, char **argv)
         client.condata.will.message.cstring = MQTT_WILLMSG;
 
         /* rt_malloc buffer. */
-        client.buf_size = client.readbuf_size = 1024;
+        client.buf_size = client.readbuf_size = MQTT_CLIENT_BUF_SIZE;
         client.buf = aos_calloc(1, client.buf_size);
         client.readbuf = aos_calloc(1, client.readbuf_size);
         if (!(client.buf && client.readbuf))

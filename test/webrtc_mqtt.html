@@ -37,6 +37,12 @@
           height:480px;
           /* float:right; */
         }
+        #sdp {
+          position:relative;
+          width: 640px;
+          height:480px;
+          /* float:right; */
+        }
         #mainvideo {
           position:absolute;
           top:0;
@@ -64,7 +70,11 @@
         <div id="buttons">
             <div id="player">
                 <video tabindex="0" id="remotevideo" class="mainvideo" controls="controls" height="480" width="640" muted=""></video>
-                <video tabindex="0" id="localvideo" controls="controls" height="120" width="160" muted=""></video></div>
+                <video tabindex="0" id="localvideo" controls="controls" height="96" width="160" muted=""></video></div>
+                <div>
+                    <h2>sdp</h2>
+                    <textarea id="sdp"></textarea>
+                </div>
             </div>
             <div>
                 <button id="initButton">本地初始化</button>
@@ -72,6 +82,7 @@
                 <button id="closeButton" disabled>停止</button>
                 <button id="sendButton" disabled>发送</button>
                 <button id="switchButton">ID互换</button>
+                <button id="setSdpButton">setSdp</button>
 
             </div>
             <div>
@@ -114,7 +125,7 @@
 
             const configuration = {
                 // sdpSemantics: 'plan-b',
-                // bundlePolicy: 'max-compat',
+                bundlePolicy: 'max-bundle',
                 // rtcpMuxPolicy: 'negotiate',
                 iceServers: [{
                     // url: 'turn:test.funlink.cloud:3478',
@@ -159,12 +170,14 @@
             const switchButton = document.getElementById('switchButton');
             const startButton = document.getElementById('startButton');
             const closeButton = document.getElementById('closeButton');
+            const setSdpButton = document.getElementById('setSdpButton');
             const sendButton = document.getElementById('sendButton');
 
             sendButton.onclick = sendData;
 
             const dataChannelSend = document.querySelector('textarea#dataChannelSend');
             const dataChannelReceive = document.querySelector('textarea#dataChannelReceive');
+            const sdp_receive = document.querySelector('textarea#sdp');
 
             let pc;
             let sendChannel;
@@ -174,6 +187,15 @@
                 video: true
             };
             let localstream;
+            const offerOptions = {
+                // New spec states offerToReceiveAudio/Video are of type long (due to
+                // having to tell how many "m" lines to generate).
+                // http://w3c.github.io/webrtc-pc/#idl-def-RTCOfferAnswerOptions.
+                // offerToReceiveAudio: (audioInput.checked) ? 1 : 0,
+                offerToReceiveVideo: 1,
+                // iceRestart: restartInput.checked,
+                // voiceActivityDetection: vadInput.checked
+            };
 
             initButton.onclick = async () => {
                 initButton.disabled = true;
@@ -253,7 +275,7 @@
                 localstream = await navigator.mediaDevices.getUserMedia(constraints);
                 localvideo.srcObject = localstream;
                 localvideo.play();
-                pc.addStream(localstream);
+                // pc.addStream(localstream);
             };
 
             switchButton.onclick = async () => {
@@ -266,12 +288,12 @@
                 startButton.disabled = true;
                 closeButton.disabled = false;
 
-                // await createPeerConnection();
+                await createPeerConnection();
                 sendChannel = pc.createDataChannel('sendDataChannel');
                 sendChannel.onopen = onSendChannelStateChange;
                 sendChannel.onmessage = onSendChannelMessageCallback;
                 sendChannel.onclose = onSendChannelStateChange;
-                const offer = await pc.createOffer();
+                const offer = await pc.createOffer(offerOptions);
                 remote_PostMessage({ type: 'offer', sdp: offer.sdp });
                 await pc.setLocalDescription(offer);
             };
@@ -280,7 +302,10 @@
                 hangup();
                 remote_PostMessage({ type: 'bye' });
             };
-
+            setSdpButton.onclick = async () => {
+                obj = JSON.parse(sdp_receive.value);
+                handleAnswer(obj);
+            };
             async function hangup() {
                 if (pc) {
                     pc.close();

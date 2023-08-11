@@ -1,6 +1,7 @@
 //#include "test_config.h"
 #include "peer_connection.h"
 #include "udp.h"
+#include "rtp_enc.h"
 #include "log.h"
 #include <cJSON.h>
 
@@ -42,6 +43,7 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
     if (argc < 2) {
         JLOG_ERROR("Usage: %s create|start|remote|pair\n", argv[0]);
         JLOG_ERROR("Usage: %s get local|remote\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_enc init|start|stop|restart\n", argv[0]);
         JLOG_ERROR("Usage: %s push offer|answer\n", argv[0]);
         JLOG_ERROR("Usage: %s state xxx\n", argv[0]);
         JLOG_ERROR("Usage: %s handshake\n", argv[0]);
@@ -64,6 +66,18 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
             juice_set_remote_description(pc->juice_agent, pc_remote->local_sdp.content);
         } else {
             JLOG_ERROR("Usage: %s remote", argv[0]);
+        }
+   } else if (strstr(argv[1], "rtp_enc")) {
+        if (strstr(argv[2], "init")) {
+            rtp_enc_init(pc);
+        } else if (strstr(argv[2], "start")) {
+            rtp_enc_start(pc);
+        } else if (strstr(argv[2], "stop")) {
+            rtp_enc_stop(pc);
+        } else if (strstr(argv[2], "restart")) {
+            rtp_enc_restart(pc);
+        } else {
+            JLOG_ERROR("Usage: %s rtp_enc init|start|stop|restart\n", argv[0]);
         }
    } else if (strstr(argv[1], "push")) {
         if (strstr(argv[2], "offer")) {
@@ -119,7 +133,7 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
                  dtls_srtp_write(&pc->dtls_srtp, argv[2], strlen(argv[2]));
             } else if (strstr(argv[2], "ch")) {
                 if (argc == 5) {
-                    sctp_outgoing_data(&pc->sctp, argv[4], strlen(argv[4]), atoi(argv[3]), PPID_STRING);
+                    peer_connection_datachannel_send(pc, atoi(argv[3]), argv[4], strlen(argv[4]));
                 } else {
                     JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
                 }
@@ -153,6 +167,7 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
     } else {
         JLOG_ERROR("Usage: %s create|start|remote|pair\n", argv[0]);
         JLOG_ERROR("Usage: %s get local|remote\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_enc init|start|stop|restart\n", argv[0]);
         JLOG_ERROR("Usage: %s push offer|answer\n", argv[0]);
         JLOG_ERROR("Usage: %s state xxx\n", argv[0]);
         JLOG_ERROR("Usage: %s handshake\n", argv[0]);
