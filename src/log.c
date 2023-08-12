@@ -167,7 +167,7 @@ void fprintf_hex(FILE *file, const char *b, size_t len, const size_t in_line, co
     fprintf(file, "%s", suffix);
 }
 
-void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, const char *buf, int length) {
+void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, const void *buf, int length) {
 	if (!juice_log_is_enabled(level))
 		return;
 

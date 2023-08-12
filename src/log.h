@@ -15,7 +15,7 @@
 
 bool juice_log_is_enabled(juice_log_level_t level);
 void juice_log_write(juice_log_level_t level, const char *file, int line, const char *fmt, ...);
-void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, const char *buf, int length);
+void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, const void *buf, int length);
 
 #define JLOG_VERBOSE(...) juice_log_write(JUICE_LOG_LEVEL_VERBOSE, __FILE__, __LINE__, __VA_ARGS__)
 #define JLOG_DEBUG(...) juice_log_write(JUICE_LOG_LEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__)

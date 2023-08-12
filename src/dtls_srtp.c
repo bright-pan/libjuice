@@ -229,6 +229,32 @@ static void dtls_srtp_libsrtp_init(void) {
     }
 }
 */
+
+void srtp_log_handler(srtp_log_level_t level,
+                                  const char *msg,
+                                  void *data)
+{
+    (void)data;
+    char level_char = '?';
+    switch (level) {
+        case srtp_log_level_error:
+            level_char = 'e';
+            break;
+        case srtp_log_level_warning:
+            level_char = 'w';
+            break;
+        case srtp_log_level_info:
+            level_char = 'i';
+            break;
+        case srtp_log_level_debug:
+            level_char = 'd';
+            break;
+    }
+    fprintf(stdout, "SRTP-LOG [%c]: %s\n", level_char, msg);
+    fflush(stdout);
+}
+
+
 int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_data) {
 
     static const mbedtls_ssl_srtp_profile default_profiles[] = {
@@ -304,7 +330,7 @@ int dtls_srtp_init(dtls_srtp_t *dtls_srtp, dtls_srtp_role_t role, void *user_dat
                                               MBEDTLS_SSL_DTLS_SRTP_MKI_UNSUPPORTED);
 
     mbedtls_ssl_setup(&dtls_srtp->ssl, &dtls_srtp->conf);
-
+    srtp_install_log_handler(srtp_log_handler, NULL);
     if (srtp_init() != srtp_err_status_ok) {
         JLOG_ERROR("libsrtp init failed");
     } else {
@@ -357,6 +383,24 @@ static void dtls_srtp_key_derivation(void *context, mbedtls_ssl_key_export_type 
     memcpy(randbytes, client_random, 32);
     memcpy(randbytes + 32, server_random, 32);
 
+    const mbedtls_ssl_ciphersuite_t *suite_info;
+    suite_info = mbedtls_ssl_ciphersuite_from_id(dtls_srtp->ssl.private_session_negotiate->private_ciphersuite);
+
+    JLOG_INFO("tls_prf_type: %d selected ciphersuite: %s, srtp profile: %s", tls_prf_type, suite_info->private_name,
+               mbedtls_ssl_get_srtp_profile_as_string(dtls_srtp->ssl.private_dtls_srtp_info.private_chosen_dtls_srtp_profile));
+    JLOG_INFO_DUMP_HEX(secret, secret_len);
+
+	if (dtls_srtp->ssl.private_dtls_srtp_info.private_chosen_dtls_srtp_profile != MBEDTLS_TLS_SRTP_AES128_CM_HMAC_SHA1_80)
+    {
+        JLOG_ERROR("Failed selected SRTP profile MBEDTLS_TLS_SRTP_AES128_CM_HMAC_SHA1_80");
+        return;
+    }
+
+	const srtp_profile_t srtpProfile = srtp_profile_aes128_cm_sha1_80;
+	const size_t keySize = SRTP_AES_128_KEY_LEN;
+	const size_t saltSize = SRTP_SALT_LEN;
+	const size_t keySizeWithSalt = SRTP_AES_ICM_128_KEY_LEN_WSALT;
+
     // Export keying material
     if ((ret = mbedtls_ssl_tls_prf(tls_prf_type, secret, secret_len, dtls_srtp_label, randbytes,
                                    sizeof(randbytes), key_material, sizeof(key_material))) != 0) {
@@ -364,75 +408,64 @@ static void dtls_srtp_key_derivation(void *context, mbedtls_ssl_key_export_type 
         JLOG_ERROR("mbedtls_ssl_tls_prf failed(%d)", ret);
         return;
     }
+	// Order is client key, server key, client salt, and server salt
+	const unsigned char *clientKey = key_material;
+	const unsigned char *serverKey = clientKey + keySize;
+	const unsigned char *clientSalt = serverKey + keySize;
+	const unsigned char *serverSalt = clientSalt + saltSize;
 
-#if 0
-  int i, j;
-  JLOG_DEBUG("    DTLS-SRTP key material is:");
-  for (j = 0; j < sizeof(key_material); j++) {
-    if (j % 8 == 0) {
-      JLOG_DEBUG("\n    ");
-    }
-    JLOG_DEBUG("%02x ", key_material[j]);
-  }
-  JLOG_DEBUG("\n");
+    JLOG_INFO("client key[%d],  client salt[%d], server key[%d], server salt[%d]", keySize, saltSize, keySize, saltSize);
+    JLOG_INFO_DUMP_HEX(clientKey, keySize);
+    JLOG_INFO_DUMP_HEX(clientSalt, saltSize);
+    JLOG_INFO_DUMP_HEX(serverKey, keySize);
+    JLOG_INFO_DUMP_HEX(serverSalt, saltSize);
 
-  /* produce a less readable output used to perform automatic checks
-   * - compare client and server output
-   * - interop test with openssl which client produces this kind of output
-   */
-  JLOG_DEBUG("    Keying material: ");
-  for (j = 0; j < sizeof(key_material); j++) {
-    JLOG_DEBUG("%02X", key_material[j]);
-  }
-  JLOG_DEBUG("\n");
-#endif
+    memcpy(dtls_srtp->remote_policy_key, serverKey, keySize);
+    memcpy(dtls_srtp->remote_policy_key + keySize, serverSalt, saltSize);
+
+    memcpy(dtls_srtp->local_policy_key, clientKey, keySize);
+    memcpy(dtls_srtp->local_policy_key + keySize, clientSalt, saltSize);
 
     // derive inbounds keys
+	srtp_policy_t inbound = {};
+	srtp_crypto_policy_set_from_profile_for_rtp(&inbound.rtp, srtpProfile);
+	srtp_crypto_policy_set_from_profile_for_rtcp(&inbound.rtcp, srtpProfile);
+	inbound.ssrc.type = ssrc_any_inbound;
 
-    memset(&dtls_srtp->remote_policy, 0, sizeof(dtls_srtp->remote_policy));
+	inbound.key = (dtls_srtp->role == DTLS_SRTP_ROLE_CLIENT) ? dtls_srtp->remote_policy_key : dtls_srtp->local_policy_key;
 
-    srtp_crypto_policy_set_rtp_default(&dtls_srtp->remote_policy.rtp);
-    srtp_crypto_policy_set_rtcp_default(&dtls_srtp->remote_policy.rtcp);
+	inbound.window_size = 1024;
+	inbound.allow_repeat_tx = true;
+	inbound.next = NULL;
 
-    memcpy(dtls_srtp->remote_policy_key, key_material, SRTP_MASTER_KEY_LENGTH);
-    memcpy(dtls_srtp->remote_policy_key + SRTP_MASTER_KEY_LENGTH,
-           key_material + SRTP_MASTER_KEY_LENGTH + SRTP_MASTER_KEY_LENGTH, SRTP_MASTER_SALT_LENGTH);
-
-    dtls_srtp->remote_policy.ssrc.type = ssrc_any_inbound;
-    dtls_srtp->remote_policy.key = dtls_srtp->remote_policy_key;
-    dtls_srtp->remote_policy.next = NULL;
+    dtls_srtp->remote_policy = inbound;
 
     if ((ret = srtp_create(&dtls_srtp->srtp_in, &dtls_srtp->remote_policy)) != srtp_err_status_ok) {
 
         JLOG_DEBUG("Error creating inbound SRTP session, ret=%d", ret);
         return;
+    } else {
+        JLOG_INFO("%s Created inbound SRTP session", dtls_srtp->role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
     }
-
-    JLOG_INFO("%s Created inbound SRTP session", dtls_srtp->role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
 
     // derive outbounds keys
-    memset(&dtls_srtp->local_policy, 0, sizeof(dtls_srtp->local_policy));
+	srtp_policy_t outbound = {};
+	srtp_crypto_policy_set_from_profile_for_rtp(&outbound.rtp, srtpProfile);
+	srtp_crypto_policy_set_from_profile_for_rtcp(&outbound.rtcp, srtpProfile);
+	outbound.ssrc.type = ssrc_any_outbound;
+	outbound.key = (dtls_srtp->role == DTLS_SRTP_ROLE_CLIENT) ? dtls_srtp->local_policy_key : dtls_srtp->remote_policy_key;
+	outbound.window_size = 1024;
+	outbound.allow_repeat_tx = true;
+	outbound.next = NULL;
 
-    srtp_crypto_policy_set_rtp_default(&dtls_srtp->local_policy.rtp);
-    srtp_crypto_policy_set_rtcp_default(&dtls_srtp->local_policy.rtcp);
-
-    memcpy(dtls_srtp->local_policy_key, key_material + SRTP_MASTER_KEY_LENGTH,
-           SRTP_MASTER_KEY_LENGTH);
-    memcpy(dtls_srtp->local_policy_key + SRTP_MASTER_KEY_LENGTH,
-           key_material + SRTP_MASTER_KEY_LENGTH + SRTP_MASTER_KEY_LENGTH + SRTP_MASTER_SALT_LENGTH,
-           SRTP_MASTER_SALT_LENGTH);
-
-    dtls_srtp->local_policy.ssrc.type = ssrc_any_outbound;
-    dtls_srtp->local_policy.key = dtls_srtp->local_policy_key;
-    dtls_srtp->local_policy.next = NULL;
+    dtls_srtp->local_policy = outbound;
 
     if ((ret = srtp_create(&dtls_srtp->srtp_out, &dtls_srtp->local_policy)) != srtp_err_status_ok) {
-
         JLOG_ERROR("Error creating outbound SRTP session, ret=%d", ret);
         return;
+    } else {
+        JLOG_INFO("%s Created outbound SRTP session", dtls_srtp->role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
     }
-
-    JLOG_INFO("%s Created outbound SRTP session", dtls_srtp->role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
     dtls_srtp->state = DTLS_SRTP_STATE_CONNECTED;
 }
 
@@ -607,24 +640,24 @@ int dtls_srtp_validate(unsigned char *buf) {
     return ((*buf >= 20) && (*buf <= 64));
 }
 
-void dtls_srtp_decrypt_rtp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
+int dtls_srtp_decrypt_rtp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
-    srtp_unprotect(dtls_srtp->srtp_in, packet, bytes);
+    return srtp_unprotect(dtls_srtp->srtp_in, packet, bytes);
 }
 
-void dtls_srtp_decrypt_rtcp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
+int dtls_srtp_decrypt_rtcp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
-    srtp_unprotect_rtcp(dtls_srtp->srtp_in, packet, bytes);
+    return srtp_unprotect_rtcp(dtls_srtp->srtp_in, packet, bytes);
 }
 
-void dtls_srtp_encrypt_rtp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
+int dtls_srtp_encrypt_rtp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
-    srtp_protect(dtls_srtp->srtp_out, packet, bytes);
+    return srtp_protect(dtls_srtp->srtp_out, packet, bytes);
 }
 
-void dtls_srtp_encrypt_rctp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
+int dtls_srtp_encrypt_rctp_packet(dtls_srtp_t *dtls_srtp, void *packet, int *bytes) {
 
-    srtp_protect_rtcp(dtls_srtp->srtp_out, packet, bytes);
+    return srtp_protect_rtcp(dtls_srtp->srtp_out, packet, bytes);
 }
 
 #if defined(CONFIG_LIBJUICE_USE_MBEDTLS) && defined(MBEDTLS_DEBUG_C)

@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "peer_connection.h"
+#include "rtcp_packet.h"
 
 // #define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
 
@@ -149,14 +150,37 @@ static void agent_on_gathering_done(juice_agent_t *agent, void *user_ptr) {
 
 // Agent on message received
 static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, void *user_ptr) {
+    char buf[4096];
+    int ret, bytes;
     peer_connection_t *pc = user_ptr;
     if((data[0]>=128) && (data[0]<=191)) {
-        JLOG_INFO( "%s recv rtp: %ld", pc->name, size);
-        packet_fifo_write(&pc->rtp_fifo, (char *)data, size);
+        // JLOG_INFO( "%s recv rtp: %ld", pc->name, size);
+        memcpy(buf, data, size);
+        bytes = size;
+        if (rtcp_packet_validate((uint8_t *)buf, bytes)) {
+            ret = dtls_srtp_decrypt_rtcp_packet(&pc->dtls_srtp, buf, &bytes);
+            if (ret == srtp_err_status_ok) {
+                JLOG_INFO("rtcp packet[%d]:", bytes);
+                JLOG_INFO_DUMP_HEX(buf, bytes);
+            } else {
+                JLOG_INFO("invalid[%d] rtcp packet[%d]:", ret, size);
+                JLOG_INFO_DUMP_HEX(data, size);
+            }
+        } else {
+            ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, buf, &bytes);
+            if (ret == srtp_err_status_ok) {
+                JLOG_INFO("rtp packet[%d]:", bytes);
+                JLOG_INFO_DUMP_HEX(buf, bytes);
+            } else {
+                JLOG_INFO("invalid[%d] rtp packet[%d]:", ret, size);
+                JLOG_INFO_DUMP_HEX(data, size);
+            }
+        }
+        //packet_fifo_write(&pc->rtp_fifo, (char *)data, size);
         return;
     }
     if((data[0]>=20)  && (data[0]<=64)) {
-        JLOG_INFO( "%s recv dtls: %ld", pc->name, size);
+        // JLOG_INFO( "%s recv dtls: %ld", pc->name, size);
         packet_fifo_write(&pc->dtls_fifo, (char *)data, size);
         return;
     }
