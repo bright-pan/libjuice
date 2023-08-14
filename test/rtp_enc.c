@@ -37,12 +37,31 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 {
     VENC_PACK_S *pPack = NULL;
     int iPackid = 0;
+    int nStartCodeSize;
 
     //pack proc
     for(iPackid = 0; iPackid < pstream->u32PackCount; iPackid++ )
     {
         pPack = &pstream->pstPack[iPackid];
         peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
+        //get start code
+        // nStartCodeSize = get_startcode_size(pPack->pu8Addr);
+        // if(nStartCodeSize == 0) {
+        //     JLOG_ERROR("!!!!! read stream fail !!!!!");
+        //     continue;
+        // }
+        // //H264
+        // H264E_NALU_TYPE_E NaluType = pPack->DataType.enH264EType;
+        // if(NaluType == H264E_NALU_SPS) {
+        //     JLOG_INFO("h264 Sps: %d, %d", iPackid, pPack->u32Len - nStartCodeSize);
+        // } else if(NaluType == H264E_NALU_PPS) {
+        //     JLOG_INFO("h264 Pps: %d, %d", iPackid, pPack->u32Len - nStartCodeSize);
+        // } else if (NaluType == H264E_NALU_IDRSLICE) {
+        //     // pframe->data = &pPack->pu8Addr[nStartCodeSize];
+        //     JLOG_INFO("h264 %-3s: %d, %d", "I", iPackid, pPack->u32Len - nStartCodeSize);
+        // } else {
+        //     JLOG_INFO("h264 %-3s: %d, %d", "P", iPackid, pPack->u32Len - nStartCodeSize);
+        // }
         /*
         //get start code
         nStartCodeSize = get_startcode_size(pPack->pu8Addr);
@@ -150,12 +169,14 @@ static void rtp_enc_entry(void *param) {
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
         if (rtp_enc_loop_flag) {
+            // JLOG_INFO("venc get stream------------------");
             if(MEDIA_VIDEO_VencGetStream(0, &venc_stream, 2000) == CVI_SUCCESS) {
                 //parse sps pps
-                //LANGO_LOG_INFO("venc get stream");
+                // JLOG_INFO("venc get stream");
                 venc_process_stream(pc, &venc_stream);
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             }
+            aos_msleep(RTP_ENC_INTERVAL);
         }
         aos_msleep(RTP_ENC_INTERVAL);
     }

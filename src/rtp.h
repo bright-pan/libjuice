@@ -1,10 +1,15 @@
 #ifndef RTP_H_
 #define RTP_H_
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include <stdint.h>
 
 #include "codec.h"
-#include "config.h"
 
 typedef enum {
 

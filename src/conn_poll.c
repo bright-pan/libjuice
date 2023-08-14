@@ -6,6 +6,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "conn_poll.h"
 #include "agent.h"
 #include "log.h"
@@ -58,7 +64,7 @@ static thread_return_t THREAD_CALL conn_thread_entry(void *arg) {
 
 int conn_poll_registry_init(conn_registry_t *registry, udp_socket_config_t *config) {
 	(void)config;
-	registry_impl_t *registry_impl = calloc(1, sizeof(registry_impl_t));
+	registry_impl_t *registry_impl = juice_calloc(1, sizeof(registry_impl_t));
 	if (!registry_impl) {
 		JLOG_FATAL("Memory allocation failed for connections registry impl");
 		return -1;
@@ -71,7 +77,7 @@ int conn_poll_registry_init(conn_registry_t *registry, udp_socket_config_t *conf
 	registry_impl->interrupt_sock = udp_create_socket(&interrupt_config);
 	if (registry_impl->interrupt_sock == INVALID_SOCKET) {
 		JLOG_FATAL("Dummy socket creation failed");
-		free(registry_impl);
+		juice_free(registry_impl);
 		return -1;
 	}
 #else
@@ -79,7 +85,7 @@ int conn_poll_registry_init(conn_registry_t *registry, udp_socket_config_t *conf
 	int pipefds[2];
 	if (pipe(pipefds)) {
 		JLOG_FATAL("Pipe creation failed");
-		free(registry_impl);
+		juice_free(registry_impl);
 		return -1;
 	}
 
@@ -106,7 +112,7 @@ error:
 	close(registry_impl->interrupt_pipe_out);
 	close(registry_impl->interrupt_pipe_in);
 #endif
-	free(registry_impl);
+	juice_free(registry_impl);
 	registry->impl = NULL;
 	return -1;
 }
@@ -123,7 +129,7 @@ void conn_poll_registry_cleanup(conn_registry_t *registry) {
 	close(registry_impl->interrupt_pipe_out);
 	close(registry_impl->interrupt_pipe_in);
 #endif
-	free(registry->impl);
+	juice_free(registry->impl);
 	registry->impl = NULL;
 }
 
@@ -134,7 +140,7 @@ int conn_poll_prepare(conn_registry_t *registry, pfds_record_t *pfds, timestamp_
 	mutex_lock(&registry->mutex);
 	nfds_t size = (nfds_t)(1 + registry->agents_size);
 	if (pfds->size != size) {
-		struct pollfd *new_pfds = realloc(pfds->pfds, sizeof(struct pollfd) * size);
+		struct pollfd *new_pfds = juice_realloc(pfds->pfds, sizeof(struct pollfd) * size);
 		if (!new_pfds) {
 			JLOG_FATAL("Memory allocation for poll file descriptors failed");
 			goto error;
@@ -320,12 +326,12 @@ int conn_poll_run(conn_registry_t *registry) {
 	}
 
 	JLOG_DEBUG("Leaving connections thread");
-	free(pfds.pfds);
+	juice_free(pfds.pfds);
 	return 0;
 }
 
 int conn_poll_init(juice_agent_t *agent, conn_registry_t *registry, udp_socket_config_t *config) {
-	conn_impl_t *conn_impl = calloc(1, sizeof(conn_impl_t));
+	conn_impl_t *conn_impl = juice_calloc(1, sizeof(conn_impl_t));
 	if (!conn_impl) {
 		JLOG_FATAL("Memory allocation failed for connection impl");
 		return -1;
@@ -334,7 +340,7 @@ int conn_poll_init(juice_agent_t *agent, conn_registry_t *registry, udp_socket_c
 	conn_impl->sock = udp_create_socket(config);
 	if (conn_impl->sock == INVALID_SOCKET) {
 		JLOG_ERROR("UDP socket creation failed");
-		free(conn_impl);
+		juice_free(conn_impl);
 		return -1;
 	}
 
@@ -352,7 +358,7 @@ void conn_poll_cleanup(juice_agent_t *agent) {
 
 	mutex_destroy(&conn_impl->send_mutex);
 	closesocket(conn_impl->sock);
-	free(agent->conn_impl);
+	juice_free(agent->conn_impl);
 	agent->conn_impl = NULL;
 }
 

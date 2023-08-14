@@ -1,8 +1,13 @@
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "config.h"
 #include "peer_connection.h"
 #include "rtcp_packet.h"
 
@@ -160,8 +165,8 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
         if (rtcp_packet_validate((uint8_t *)buf, bytes)) {
             ret = dtls_srtp_decrypt_rtcp_packet(&pc->dtls_srtp, buf, &bytes);
             if (ret == srtp_err_status_ok) {
-                JLOG_INFO("rtcp packet[%d]:", bytes);
-                JLOG_INFO_DUMP_HEX(buf, bytes);
+                // JLOG_INFO("rtcp packet[%d]:", bytes);
+                // JLOG_INFO_DUMP_HEX(buf, bytes);
             } else {
                 JLOG_INFO("invalid[%d] rtcp packet[%d]:", ret, size);
                 JLOG_INFO_DUMP_HEX(data, size);
@@ -169,8 +174,8 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
         } else {
             ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, buf, &bytes);
             if (ret == srtp_err_status_ok) {
-                JLOG_INFO("rtp packet[%d]:", bytes);
-                JLOG_INFO_DUMP_HEX(buf, bytes);
+                // JLOG_INFO("rtp packet[%d]:", bytes);
+                // JLOG_INFO_DUMP_HEX(buf, bytes);
             } else {
                 JLOG_INFO("invalid[%d] rtp packet[%d]:", ret, size);
                 JLOG_INFO_DUMP_HEX(data, size);
@@ -332,6 +337,7 @@ void peer_connection_loop(void *param) {
 
 //   memset(pc->juice_agent_buf, 0, sizeof(pc->juice_agent_buf));
 //   pc->juice_agent_ret = -1;
+    int ret;
     peer_connection_t *pc = (peer_connection_t *)param;
 
     while(1) {
@@ -439,7 +445,8 @@ void peer_connection_loop(void *param) {
             case PEER_CONNECTION_COMPLETED: {
                 //recv fifo
                 char buf[4096];
-                int recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
+                int recv_count;
+                recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
                 if (recv_count > 0) {
                     sctp_incoming_data(&pc->sctp, buf, recv_count);
                 }
@@ -447,7 +454,9 @@ void peer_connection_loop(void *param) {
                 while (1) {
                     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
                     if (recv_count > 0) {
-                        peer_connection_send_rtp_packet(pc, buf, recv_count);
+                        // JLOG_INFO_DUMP_HEX(buf, recv_count);
+                        ret = peer_connection_send_rtp_packet(pc, buf, recv_count);
+                        // JLOG_INFO("send rtp[%d], ret=%d", recv_count, ret);
                     } else {
                         // no data
                         break;
@@ -478,13 +487,13 @@ void peer_connection_init(peer_connection_t *pc) {
 //   RtpPayloadType type;
 
     // recv fifo
-    packet_fifo_init(&pc->rtp_fifo);
-    packet_fifo_init(&pc->dtls_fifo);
-    packet_fifo_init(&pc->other_fifo);
+    packet_fifo_init(&pc->rtp_fifo, 64);
+    packet_fifo_init(&pc->dtls_fifo, 64);
+    packet_fifo_init(&pc->other_fifo, 64);
     // send fifo
-    packet_fifo_init(&pc->video_fifo);
-    packet_fifo_init(&pc->audio_fifo);
-    packet_fifo_init(&pc->data_fifo);
+    packet_fifo_init(&pc->video_fifo, 512);
+    packet_fifo_init(&pc->audio_fifo, 256);
+    packet_fifo_init(&pc->data_fifo, 256);
     //   memset(&pc->sctp, 0, sizeof(pc->sctp));
     if (pc->role == DTLS_SRTP_ROLE_SERVER) {
         pc->recv_timeout = 1000*10;
@@ -581,9 +590,8 @@ void peer_connection_start(peer_connection_t *pc) {
 }
 
 int peer_connection_send_rtp_packet(peer_connection_t *pc, char *packet, int bytes) {
-    int len;
-    dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &len);
-    int ret = juice_send(pc->juice_agent, packet, len);
+    dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
+    int ret = juice_send(pc->juice_agent, packet, bytes);
     if (ret == JUICE_ERR_SUCCESS) {
         return bytes;
     } else {

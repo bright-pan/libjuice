@@ -6,6 +6,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "ice.h"
 #include "log.h"
 #include "random.h"
@@ -17,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BUFFER_SIZE 1024
+#define ICE_BUUFER_SIZE 1024
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
@@ -105,7 +111,7 @@ int ice_parse_sdp(const char *sdp, ice_description_t *description) {
 	description->candidates_count = 0;
 	description->finished = false;
 
-	char buffer[BUFFER_SIZE];
+	char buffer[ICE_BUUFER_SIZE];
 	size_t size = 0;
 	while (*sdp) {
 		if (*sdp == '\n') {
@@ -116,7 +122,7 @@ int ice_parse_sdp(const char *sdp, ice_description_t *description) {
 
 				size = 0;
 			}
-		} else if (*sdp != '\r' && size + 1 < BUFFER_SIZE) {
+		} else if (*sdp != '\r' && size + 1 < ICE_BUUFER_SIZE) {
 			buffer[size++] = *sdp;
 		}
 		++sdp;
@@ -279,8 +285,8 @@ int ice_generate_sdp(const ice_description_t *description, char *buffer, size_t 
 			if (candidate->type == ICE_CANDIDATE_TYPE_UNKNOWN ||
 			    candidate->type == ICE_CANDIDATE_TYPE_PEER_REFLEXIVE)
 				continue;
-			char tmp[BUFFER_SIZE];
-			if (ice_generate_candidate_sdp(candidate, tmp, BUFFER_SIZE) < 0)
+			char tmp[ICE_BUUFER_SIZE];
+			if (ice_generate_candidate_sdp(candidate, tmp, ICE_BUUFER_SIZE) < 0)
 				continue;
 			ret = snprintf(begin, end - begin, "%s\r\n", tmp);
 		} else { // i == description->candidates_count + 1

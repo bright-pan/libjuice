@@ -6,6 +6,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "conn_thread.h"
 #include "agent.h"
 #include "log.h"
@@ -162,7 +168,7 @@ int conn_thread_run(juice_agent_t *agent) {
 int conn_thread_init(juice_agent_t *agent, conn_registry_t *registry, udp_socket_config_t *config) {
 	(void)registry;
 
-	conn_impl_t *conn_impl = calloc(1, sizeof(conn_impl_t));
+	conn_impl_t *conn_impl = juice_calloc(1, sizeof(conn_impl_t));
 	if (!conn_impl) {
 		JLOG_FATAL("Memory allocation failed for connection impl");
 		return -1;
@@ -171,7 +177,7 @@ int conn_thread_init(juice_agent_t *agent, conn_registry_t *registry, udp_socket
 	conn_impl->sock = udp_create_socket(config);
 	if (conn_impl->sock == INVALID_SOCKET) {
 		JLOG_ERROR("UDP socket creation failed");
-		free(conn_impl);
+		juice_free(conn_impl);
 		return -1;
 	}
 
@@ -184,7 +190,7 @@ int conn_thread_init(juice_agent_t *agent, conn_registry_t *registry, udp_socket
 	int ret = thread_init(&conn_impl->thread, conn_thread_entry, agent);
 	if (ret) {
 		JLOG_FATAL("Thread creation failed, error=%d", ret);
-		free(conn_impl);
+		juice_free(conn_impl);
 		agent->conn_impl = NULL;
 		return -1;
 	}
@@ -207,7 +213,7 @@ void conn_thread_cleanup(juice_agent_t *agent) {
 	closesocket(conn_impl->sock);
 	mutex_destroy(&conn_impl->mutex);
 	mutex_destroy(&conn_impl->send_mutex);
-	free(agent->conn_impl);
+	juice_free(agent->conn_impl);
 	agent->conn_impl = NULL;
 }
 

@@ -1,3 +1,9 @@
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,7 +86,7 @@ static int dtls_srtp_selfsign_cert_with_rsa(dtls_srtp_t *dtls_srtp) {
 
     mbedtls_mpi serial;
 
-    unsigned char *cert_buf = (unsigned char *)malloc(RSA_KEY_LENGTH * 2);
+    unsigned char *cert_buf = (unsigned char *)juice_malloc(RSA_KEY_LENGTH * 2);
 
     const char *pers = "dtls_srtp";
 
@@ -130,7 +136,7 @@ static int dtls_srtp_selfsign_cert_with_rsa(dtls_srtp_t *dtls_srtp) {
 
     mbedtls_mpi_free(&serial);
 
-    free(cert_buf);
+    juice_free(cert_buf);
 
     return ret;
 }
@@ -144,7 +150,7 @@ static int dtls_srtp_selfsign_cert_with_ecdsa(dtls_srtp_t *dtls_srtp) {
 
     mbedtls_mpi serial;
 
-    unsigned char *cert_buf = (unsigned char *)malloc(RSA_KEY_LENGTH * 2);
+    unsigned char *cert_buf = (unsigned char *)juice_malloc(RSA_KEY_LENGTH * 2);
     // memset(cert_buf, 0, RSA_KEY_LENGTH * 2);
     const char *pers = "dtls_srtp";
 
@@ -206,7 +212,7 @@ static int dtls_srtp_selfsign_cert_with_ecdsa(dtls_srtp_t *dtls_srtp) {
 
     mbedtls_mpi_free(&serial);
 
-    free(cert_buf);
+    juice_free(cert_buf);
 
     return ret;
 }

@@ -77,6 +77,7 @@ source_file:
   - "src/rtcp_packet.c"
   - "src/sdp.c"
   - "src/sctp.c"
+  - "src/paho_mqtt_udp.c"
   - "test/*.c"
 
 ## 第五部分：配置信息
@@ -90,6 +91,7 @@ def_config:
     CONFIG_LIBJUICE_USE_MBEDTLS: y
     JUICE_ENABLE_LOCALHOST_ADDRESS: 1
     JUICE_STATIC: y
+    JUICE_USE_MEMPOOL: y
 
 ## 第六部分：安装信息
 # install:

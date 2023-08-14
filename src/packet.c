@@ -1,3 +1,9 @@
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "packet.h"
 #include "log.h"
 
@@ -222,6 +228,6 @@ uint32_t packet_fifo_avail(packet_fifo_t *fifo) {
 }
 
 
-void packet_fifo_init(packet_fifo_t *fifo) {
-    ring_fifo_init(fifo, 256, sizeof(packet_frame_t));
+void packet_fifo_init(packet_fifo_t *fifo, size_t size) {
+    ring_fifo_init(fifo, size, sizeof(packet_frame_t));
 }

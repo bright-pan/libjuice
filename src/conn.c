@@ -6,6 +6,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "conn.h"
 #include "agent.h"
 #include "conn_mux.h"
@@ -63,16 +69,16 @@ static conn_registry_t *acquire_registry(conn_mode_entry_t *entry, udp_socket_co
 
 		JLOG_DEBUG("Creating connections registry");
 
-		registry = calloc(1, sizeof(conn_registry_t));
+		registry = juice_calloc(1, sizeof(conn_registry_t));
 		if (!registry) {
 			JLOG_FATAL("Memory allocation failed for connections registry");
 			return NULL;
 		}
 
-		registry->agents = malloc(INITIAL_REGISTRY_SIZE * sizeof(juice_agent_t *));
+		registry->agents = juice_malloc(INITIAL_REGISTRY_SIZE * sizeof(juice_agent_t *));
 		if (!registry->agents) {
 			JLOG_FATAL("Memory allocation failed for connections array");
-			free(registry);
+			juice_free(registry);
 			return NULL;
 		}
 
@@ -85,8 +91,8 @@ static conn_registry_t *acquire_registry(conn_mode_entry_t *entry, udp_socket_co
 
 		if (entry->registry_init_func(registry, config)) {
 			mutex_unlock(&registry->mutex);
-			free(registry->agents);
-			free(registry);
+			juice_free(registry->agents);
+			juice_free(registry);
 			return NULL;
 		}
 
@@ -115,8 +121,8 @@ static void release_registry(conn_mode_entry_t *entry) {
 		if (entry->registry_cleanup_func)
 			entry->registry_cleanup_func(registry);
 
-		free(registry->agents);
-		free(registry);
+		juice_free(registry->agents);
+		juice_free(registry);
 		entry->registry = NULL;
 		return;
 	}
@@ -145,7 +151,7 @@ int conn_create(juice_agent_t *agent, udp_socket_config_t *config) {
 			assert(new_size > 0);
 
 			juice_agent_t **new_agents =
-			    realloc(registry->agents, new_size * sizeof(juice_agent_t *));
+			    juice_realloc(registry->agents, new_size * sizeof(juice_agent_t *));
 			if (!new_agents) {
 				JLOG_FATAL("Memory reallocation failed for connections array");
 				mutex_unlock(&registry->mutex);

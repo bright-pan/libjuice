@@ -18,7 +18,7 @@ void packet_fifo_clear(packet_fifo_t *fifo, uint32_t size);
 uint32_t packet_fifo_size(packet_fifo_t *fifo);
 uint32_t packet_fifo_len(packet_fifo_t *fifo);
 uint32_t packet_fifo_avail(packet_fifo_t *fifo);
-void packet_fifo_init(packet_fifo_t *fifo);
+void packet_fifo_init(packet_fifo_t *fifo, size_t size);
 
 #ifdef __cplusplus
 }

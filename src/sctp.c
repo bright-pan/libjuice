@@ -1,3 +1,9 @@
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -359,7 +365,7 @@ stream, int flags) {
       JLOG_DEBUG("Got message %s (size = %ld)", msg, len);
       if(msg && sctp->onmessasge) {
         sctp->onmessasge(msg, len, sctp->userdata);
-        free(msg);
+        juice_free(msg);
       }
       break;
     case DATA_CHANNEL_PPID_BINARY:
@@ -499,7 +505,7 @@ void sctp_destroy(sctp_t *sctp) {
             sctp->sock = NULL;
         }
 
-        free(sctp);
+        juice_free(sctp);
         sctp = NULL;
     }
 #endif

@@ -11,6 +11,7 @@ extern "C" {
 #include <stdbool.h>
 #include <aos/kernel.h>
 #include <aos/cli.h>
+#include "config.h"
 
 // os port
 typedef aos_mutex_t ring_fifo_mutex_t;
@@ -19,9 +20,9 @@ typedef aos_sem_t ring_fifo_sem_t;
 #define RING_FIFO_LOCK(fifo) aos_mutex_lock(&fifo->mutex, AOS_WAIT_FOREVER)
 #define RING_FIFO_UNLOCK(fifo) aos_mutex_unlock(&fifo->mutex)
 #define RING_FIFO_MUTEX_INIT(fifo) aos_mutex_new(&fifo->mutex)
-#define RING_FIFO_CALLOC(nums, size) aos_calloc_check(nums, size);
-#define RING_FIFO_MALLOC(size) aos_malloc(size)
-#define RING_FIFO_FREE(ptr) aos_free(ptr)
+#define RING_FIFO_CALLOC(nums, size) juice_calloc(nums, size);
+#define RING_FIFO_MALLOC(size) juice_malloc(size)
+#define RING_FIFO_FREE(ptr) juice_free(ptr)
 #define RING_FIFO_SEM_INIT(fifo) aos_sem_new(&fifo->sem, 0)
 
 // common

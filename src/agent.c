@@ -6,6 +6,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "agent.h"
 #include "ice.h"
 #include "juice.h"
@@ -14,6 +20,7 @@
 #include "stun.h"
 #include "turn.h"
 #include "udp.h"
+#include "config.h"
 
 #include <assert.h>
 #include <inttypes.h>
@@ -42,7 +49,7 @@ static char *alloc_string_copy(const char *orig, bool *alloc_failed) {
 	if (!orig)
 		return NULL;
 
-	char *copy = malloc(strlen(orig) + 1);
+	char *copy = juice_malloc(strlen(orig) + 1);
 	if (!copy) {
 		if (alloc_failed)
 			*alloc_failed = true;
@@ -64,7 +71,7 @@ juice_agent_t *agent_create(const juice_config_t *config) {
 	}
 #endif
 
-	juice_agent_t *agent = calloc(1, sizeof(juice_agent_t));
+	juice_agent_t *agent = juice_calloc(1, sizeof(juice_agent_t));
 	if (!agent) {
 		JLOG_FATAL("Memory allocation for agent failed");
 		return NULL;
@@ -92,7 +99,7 @@ juice_agent_t *agent_create(const juice_config_t *config) {
 		agent->config.turn_servers_count = 0;
 	} else {
 		agent->config.turn_servers =
-		    calloc(config->turn_servers_count, sizeof(juice_turn_server_t));
+		    juice_calloc(config->turn_servers_count, sizeof(juice_turn_server_t));
 		if (!agent->config.turn_servers) {
 			JLOG_FATAL("Memory allocation for TURN servers copy failed");
 			goto error;
@@ -156,21 +163,21 @@ void agent_destroy(juice_agent_t *agent) {
 		agent_stun_entry_t *entry = agent->entries + i;
 		if (entry->turn) {
 			turn_destroy_map(&entry->turn->map);
-			free(entry->turn);
+			juice_free(entry->turn);
 		}
 	}
 
 	// Free strings in config
-	free((void *)agent->config.stun_server_host);
+	juice_free((void *)agent->config.stun_server_host);
 	for (int i = 0; i < agent->config.turn_servers_count; ++i) {
 		juice_turn_server_t *turn_server = agent->config.turn_servers + i;
-		free((void *)turn_server->host);
-		free((void *)turn_server->username);
-		free((void *)turn_server->password);
+		juice_free((void *)turn_server->host);
+		juice_free((void *)turn_server->username);
+		juice_free((void *)turn_server->password);
 	}
-	free(agent->config.turn_servers);
-	free((void *)agent->config.bind_address);
-	free(agent);
+	juice_free(agent->config.turn_servers);
+	juice_free((void *)agent->config.bind_address);
+	juice_free(agent);
 
 #ifdef _WIN32
 	WSACleanup();
@@ -366,13 +373,13 @@ int agent_resolve_servers(juice_agent_t *agent) {
 					entry->pair = NULL;
 					entry->record = *record;
 					entry->turn_redirections = 0;
-					entry->turn = calloc(1, sizeof(agent_turn_state_t));
+					entry->turn = juice_calloc(1, sizeof(agent_turn_state_t));
 					if (!entry->turn) {
 						JLOG_ERROR("Memory allocation for TURN state failed");
 						break;
 					}
 					if (turn_init_map(&entry->turn->map, AGENT_TURN_MAP_SIZE) < 0) {
-						free(entry->turn);
+						juice_free(entry->turn);
 						break;
 					}
 					snprintf(entry->turn->credentials.username, STUN_MAX_USERNAME_LEN, "%s",

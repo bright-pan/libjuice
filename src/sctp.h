@@ -1,7 +1,12 @@
 #ifndef SCTP_H_
 #define SCTP_H_
 
-#include "config.h"
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "dtls_srtp.h"
 
 #ifndef HAVE_USRSCTP

@@ -8,6 +8,12 @@
 
 #ifndef NO_SERVER
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "server.h"
 #include "const_time.h"
 #include "hmac.h"
@@ -48,7 +54,7 @@ static char *alloc_string_copy(const char *orig, bool *alloc_failed) {
 	if (!orig)
 		return NULL;
 
-	char *copy = malloc(strlen(orig) + 1);
+	char *copy = juice_malloc(strlen(orig) + 1);
 	if (!copy) {
 		if (alloc_failed)
 			*alloc_failed = true;
@@ -105,7 +111,7 @@ juice_server_t *server_create(const juice_server_config_t *config) {
 	}
 #endif
 
-	juice_server_t *server = calloc(1, sizeof(juice_server_t));
+	juice_server_t *server = juice_calloc(1, sizeof(juice_server_t));
 	if (!server) {
 		JLOG_FATAL("Memory allocation for server data failed");
 		return NULL;
@@ -120,7 +126,7 @@ juice_server_t *server_create(const juice_server_config_t *config) {
 	server->sock = udp_create_socket(&socket_config);
 	if (server->sock == INVALID_SOCKET) {
 		JLOG_FATAL("Server socket opening failed");
-		free(server);
+		juice_free(server);
 		return NULL;
 	}
 
@@ -154,7 +160,7 @@ juice_server_t *server_create(const juice_server_config_t *config) {
 
 	} else {
 		// TURN enabled
-		server->allocs = calloc(server->config.max_allocations, sizeof(server_turn_alloc_t));
+		server->allocs = juice_calloc(server->config.max_allocations, sizeof(server_turn_alloc_t));
 		if (!server->allocs) {
 			JLOG_FATAL("Memory allocation for TURN allocation table failed");
 			goto error;
@@ -215,21 +221,21 @@ void server_do_destroy(juice_server_t *server) {
 	for (server_turn_alloc_t *alloc = server->allocs; alloc < end; ++alloc) {
 		delete_allocation(alloc);
 	}
-	free((void *)server->allocs);
+	juice_free((void *)server->allocs);
 
 	juice_credentials_list_t *node = server->credentials;
 	while (node) {
 		juice_credentials_list_t *prev = node;
 		node = node->next;
-		free((void *)prev->credentials.username);
-		free((void *)prev->credentials.password);
-		free(prev);
+		juice_free((void *)prev->credentials.username);
+		juice_free((void *)prev->credentials.password);
+		juice_free(prev);
 	}
 
-	free((void *)server->config.bind_address);
-	free((void *)server->config.external_address);
-	free((void *)server->config.realm);
-	free(server);
+	juice_free((void *)server->config.bind_address);
+	juice_free((void *)server->config.external_address);
+	juice_free((void *)server->config.realm);
+	juice_free(server);
 
 #ifdef _WIN32
 	WSACleanup();
@@ -268,7 +274,7 @@ int server_add_credentials(juice_server_t *server, const juice_server_credential
 			JLOG_INFO("Enabling TURN relaying");
 
 		server_turn_alloc_t *reallocated =
-		    realloc(server->allocs, server->config.max_allocations * sizeof(server_turn_alloc_t));
+		    juice_realloc(server->allocs, server->config.max_allocations * sizeof(server_turn_alloc_t));
 		if (!reallocated) {
 			JLOG_ERROR("Memory allocation for TURN allocation table failed");
 			mutex_unlock(&server->mutex);
@@ -297,7 +303,7 @@ int server_add_credentials(juice_server_t *server, const juice_server_credential
 juice_credentials_list_t *server_do_add_credentials(juice_server_t *server,
                                                     const juice_server_credentials_t *credentials,
                                                     timediff_t lifetime) {
-	juice_credentials_list_t *node = calloc(1, sizeof(juice_credentials_list_t));
+	juice_credentials_list_t *node = juice_calloc(1, sizeof(juice_credentials_list_t));
 	if (!node) {
 		JLOG_ERROR("Memory allocation for TURN credentials failed");
 		goto error;
@@ -327,9 +333,9 @@ juice_credentials_list_t *server_do_add_credentials(juice_server_t *server,
 
 error:
 	if (node) {
-		free((void *)node->credentials.username);
-		free((void *)node->credentials.password);
-		free(node);
+		juice_free((void *)node->credentials.username);
+		juice_free((void *)node->credentials.password);
+		juice_free(node);
 	}
 	return NULL;
 }
@@ -347,9 +353,9 @@ void server_run(juice_server_t *server) {
 			timediff = 0;
 
 		if (!pfd || nfd != (nfds_t)(1 + server->allocs_count)) {
-			free(pfd);
+			juice_free(pfd);
 			nfd = (nfds_t)(1 + server->allocs_count);
-			pfd = calloc(nfd, sizeof(struct pollfd));
+			pfd = juice_calloc(nfd, sizeof(struct pollfd));
 			if (!pfd) {
 				JLOG_FATAL("Memory allocation for poll descriptors failed");
 				break;
@@ -407,7 +413,7 @@ void server_run(juice_server_t *server) {
 	}
 
 	JLOG_DEBUG("Leaving server thread");
-	free(pfd);
+	juice_free(pfd);
 	mutex_unlock(&server->mutex);
 }
 
@@ -595,9 +601,9 @@ int server_bookkeeping(juice_server_t *server, timestamp_t *next_timestamp) {
 		if ((*pnode)->timestamp && (*pnode)->timestamp <= now) {
 			JLOG_DEBUG("Credentials timed out");
 			juice_credentials_list_t *next = (*pnode)->next;
-			free((void *)(*pnode)->credentials.username);
-			free((void *)(*pnode)->credentials.password);
-			free((*pnode));
+			juice_free((void *)(*pnode)->credentials.username);
+			juice_free((void *)(*pnode)->credentials.password);
+			juice_free((*pnode));
 			*pnode = next;
 			continue;
 		}

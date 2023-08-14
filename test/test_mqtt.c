@@ -1,3 +1,10 @@
+
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -26,13 +33,8 @@
  * tcp://[fe80::20c:29ff:fe9a:a07e]:1883
  * ssl://[fe80::20c:29ff:fe9a:a07e]:1884
  */
-#define MQTT_URI                "tcp://broker.emqx.io:1883"
-#define MQTT_SUBTOPIC           "/webrtc/mqttjs_bd853a81"
-#define MQTT_PUBTOPIC           "/webrtc/mqttjs_3f770906"
-#define MQTT_WILLMSG            "Goodbye!"
 
 /* define MQTT client context */
-#define MQTT_CLIENT_BUF_SIZE SDP_CONTENT_LENGTH
 static MQTTClient client;
 static int is_started = 0;
 static char cmd_buf[SDP_CONTENT_LENGTH];
@@ -163,7 +165,7 @@ static int mqtt_start(int argc, char **argv)
         client.condata.cleansession = 1;
 
         /* config MQTT will param. */
-        client.condata.willFlag = 0;
+        client.condata.willFlag = MQTT_WILLFLAG;
         client.condata.will.qos = 1;
         client.condata.will.retained = 0;
         client.condata.will.topicName.cstring = MQTT_PUBTOPIC;
@@ -171,13 +173,11 @@ static int mqtt_start(int argc, char **argv)
 
         /* rt_malloc buffer. */
         client.buf_size = client.readbuf_size = MQTT_CLIENT_BUF_SIZE;
-        client.buf = aos_calloc(1, client.buf_size);
-        client.readbuf = aos_calloc(1, client.readbuf_size);
-        if (!(client.buf && client.readbuf))
-        {
-            JLOG_ERROR("no memory for MQTT client buffer!");
-            return -1;
-        }
+        // if (!(client.buf && client.readbuf))
+        // {
+        //     JLOG_ERROR("no memory for MQTT client buffer!");
+        //     return -1;
+        // }
 
         /* set event callback function */
         client.connect_callback = mqtt_connect_callback;

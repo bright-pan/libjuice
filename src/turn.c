@@ -6,6 +6,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "turn.h"
 #include "log.h"
 #include "random.h"
@@ -220,9 +226,9 @@ int turn_init_map(turn_map_t *map, int size) {
 	map->channels_count = 0;
 	map->transaction_ids_count = 0;
 
-	map->map = calloc(map->map_size, sizeof(turn_entry_t));
-	map->ordered_channels = calloc(map->map_size, sizeof(turn_entry_t *));
-	map->ordered_transaction_ids = calloc(map->map_size, sizeof(turn_entry_t *));
+	map->map = juice_calloc(map->map_size, sizeof(turn_entry_t));
+	map->ordered_channels = juice_calloc(map->map_size, sizeof(turn_entry_t *));
+	map->ordered_transaction_ids = juice_calloc(map->map_size, sizeof(turn_entry_t *));
 
 	if (!map->map || !map->ordered_channels || !map->ordered_transaction_ids) {
 		JLOG_ERROR("Failed to allocate TURN map of size %d", size);
@@ -234,9 +240,9 @@ int turn_init_map(turn_map_t *map, int size) {
 }
 
 void turn_destroy_map(turn_map_t *map) {
-	free(map->map);
-	free(map->ordered_channels);
-	free(map->ordered_transaction_ids);
+	juice_free(map->map);
+	juice_free(map->ordered_channels);
+	juice_free(map->ordered_transaction_ids);
 }
 
 bool turn_set_permission(turn_map_t *map, const uint8_t *transaction_id,

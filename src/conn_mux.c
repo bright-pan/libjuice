@@ -6,6 +6,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include "conn_mux.h"
 #include "agent.h"
 #include "log.h"
@@ -130,7 +136,7 @@ static int grow_map(registry_impl_t *impl, int new_size) {
 
 	JLOG_DEBUG("Growing map, new_size=%d", new_size);
 
-	map_entry_t *new_map = calloc(1, new_size * sizeof(map_entry_t));
+	map_entry_t *new_map = juice_calloc(1, new_size * sizeof(map_entry_t));
 	if (!new_map) {
 		JLOG_FATAL("Memory allocation failed for map");
 		return -1;
@@ -148,7 +154,7 @@ static int grow_map(registry_impl_t *impl, int new_size) {
 			insert_map_entry(impl, &old_entry->record, old_entry->agent);
 	}
 
-	free(old_map);
+	juice_free(old_map);
 	return 0;
 }
 
@@ -167,16 +173,16 @@ static thread_return_t THREAD_CALL conn_mux_thread_entry(void *arg) {
 
 int conn_mux_registry_init(conn_registry_t *registry, udp_socket_config_t *config) {
 	(void)config;
-	registry_impl_t *registry_impl = calloc(1, sizeof(registry_impl_t));
+	registry_impl_t *registry_impl = juice_calloc(1, sizeof(registry_impl_t));
 	if (!registry_impl) {
 		JLOG_FATAL("Memory allocation failed for connections registry impl");
 		return -1;
 	}
 
-	registry_impl->map = calloc(INITIAL_MAP_SIZE, sizeof(map_entry_t));
+	registry_impl->map = juice_calloc(INITIAL_MAP_SIZE, sizeof(map_entry_t));
 	if (!registry_impl->map) {
 		JLOG_FATAL("Memory allocation failed for map");
-		free(registry_impl);
+		juice_free(registry_impl);
 		return -1;
 	}
 	registry_impl->map_size = INITIAL_MAP_SIZE;
@@ -185,8 +191,8 @@ int conn_mux_registry_init(conn_registry_t *registry, udp_socket_config_t *confi
 	registry_impl->sock = udp_create_socket(config);
 	if (registry_impl->sock == INVALID_SOCKET) {
 		JLOG_FATAL("UDP socket creation failed");
-		free(registry_impl->map);
-		free(registry_impl);
+		juice_free(registry_impl->map);
+		juice_free(registry_impl);
 		return -1;
 	}
 
@@ -205,8 +211,8 @@ int conn_mux_registry_init(conn_registry_t *registry, udp_socket_config_t *confi
 error:
 	mutex_destroy(&registry_impl->send_mutex);
 	closesocket(registry_impl->sock);
-	free(registry_impl->map);
-	free(registry_impl);
+	juice_free(registry_impl->map);
+	juice_free(registry_impl);
 	registry->impl = NULL;
 	return -1;
 }
@@ -219,8 +225,8 @@ void conn_mux_registry_cleanup(conn_registry_t *registry) {
 
 	mutex_destroy(&registry_impl->send_mutex);
 	closesocket(registry_impl->sock);
-	free(registry_impl->map);
-	free(registry->impl);
+	juice_free(registry_impl->map);
+	juice_free(registry->impl);
 	registry->impl = NULL;
 }
 
@@ -442,7 +448,7 @@ int conn_mux_run(conn_registry_t *registry) {
 int conn_mux_init(juice_agent_t *agent, conn_registry_t *registry, udp_socket_config_t *config) {
 	(void)config; // ignored, only the config from the first connection is used
 
-	conn_impl_t *conn_impl = calloc(1, sizeof(conn_impl_t));
+	conn_impl_t *conn_impl = juice_calloc(1, sizeof(conn_impl_t));
 	if (!conn_impl) {
 		JLOG_FATAL("Memory allocation failed for connection impl");
 		return -1;
@@ -464,7 +470,7 @@ void conn_mux_cleanup(juice_agent_t *agent) {
 
 	conn_mux_interrupt(agent);
 
-	free(agent->conn_impl);
+	juice_free(agent->conn_impl);
 	agent->conn_impl = NULL;
 }
 

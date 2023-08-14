@@ -1,3 +1,9 @@
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #include <stdio.h>
 #include <string.h>
 
