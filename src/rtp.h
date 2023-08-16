@@ -16,14 +16,14 @@ typedef enum {
     RTP_PAYLOAD_TYPE_PCMU = 0,
     RTP_PAYLOAD_TYPE_PCMA = 8,
     RTP_PAYLOAD_TYPE_G722 = 9,
-    RTP_PAYLOAD_TYPE_H264 = 104,
+    RTP_PAYLOAD_TYPE_H264 = 102,
     RTP_PAYLOAD_TYPE_OPUS = 111
 
 } rtp_payload_type_t;
 
 typedef enum {
 
-    RTP_SSRC_TYPE_H264 = 1,
+    RTP_SSRC_TYPE_H264 = 123456,
     RTP_SSRC_TYPE_PCMA = 4,
     RTP_SSRC_TYPE_PCMU = 5,
     RTP_SSRC_TYPE_OPUS = 6,
@@ -73,7 +73,7 @@ typedef struct rtp_packetizer rtp_packetizer_t;
 struct rtp_packetizer {
 
     rtp_payload_type_t type;
-    void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data);
+    void (*on_packet)(char *packet, int bytes, void *user_data);
     int (*encode_func)(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size);
     void *user_data;
     uint16_t seq_number;
@@ -85,7 +85,7 @@ struct rtp_packetizer {
 int rtp_packet_validate(uint8_t *packet, size_t size);
 
 void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec,
-                         void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data),
+                         void (*on_packet)(char *packet, int bytes, void *user_data),
                          void *user_data);
 
 int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, void *buf, size_t size);

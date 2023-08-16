@@ -32,7 +32,7 @@
 //     }
 //     return nSize;
 // }
-
+        /*
 static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 {
     VENC_PACK_S *pPack = NULL;
@@ -62,7 +62,7 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
         // } else {
         //     JLOG_INFO("h264 %-3s: %d, %d", "P", iPackid, pPack->u32Len - nStartCodeSize);
         // }
-        /*
+
         //get start code
         nStartCodeSize = get_startcode_size(pPack->pu8Addr);
         if(nStartCodeSize == 0) {
@@ -146,10 +146,10 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
                 mempool_trace();
                 LANGO_LOG_ERR("rtmp fifo venc write failure!");
             }
-        }*/
+        }
     }
     return 0;
-}
+}*/
 
 // void video_frame_loss(int s32_loss_num) {
 //     VENC_STREAM_S venc_stream = {0};
@@ -165,20 +165,40 @@ int rtp_enc_loop_flag = 0;
 static void rtp_enc_entry(void *param) {
     peer_connection_t *pc = param;
     VENC_STREAM_S venc_stream = {0};
-
+    VENC_PACK_S *pPack = NULL;
+    int iPackid = 0;
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
-        if (rtp_enc_loop_flag) {
+        if (rtp_enc_loop_flag && pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
             // JLOG_INFO("venc get stream------------------");
             if(MEDIA_VIDEO_VencGetStream(0, &venc_stream, 2000) == CVI_SUCCESS) {
                 //parse sps pps
                 // JLOG_INFO("venc get stream");
-                venc_process_stream(pc, &venc_stream);
+                // venc_process_stream(pc, &venc_stream);
+
+                //pack proc
+                for(iPackid = 0; iPackid < venc_stream.u32PackCount; iPackid++ )
+                {
+                    pPack = &venc_stream.pstPack[iPackid];
+                    // peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
+                    rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
+                    //send fifo
+                    // while (1) {
+                    //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
+                    //     if (recv_count > 0) {
+                    //         // JLOG_INFO_DUMP_HEX(buf, recv_count);
+                    //         ret = peer_connection_send_rtp_packet(pc, buf, recv_count);
+                    //         // JLOG_INFO("send rtp[%d], ret=%d", recv_count, ret);
+                    //     } else {
+                    //         // no data
+                    //         break;
+                    //     }
+                    // }
+                }
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             }
-            aos_msleep(RTP_ENC_INTERVAL);
         }
-        aos_msleep(RTP_ENC_INTERVAL);
+        aos_msleep(1);
     }
 }
 

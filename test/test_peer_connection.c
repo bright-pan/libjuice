@@ -25,18 +25,23 @@ static void on_channel_msg(char *msg, size_t len, uint16_t si, void *userdata) {
 
 static void on_channel_open(void *userdata) {
     peer_connection_t *pc = (peer_connection_t *)userdata;
-    JLOG_INFO("%s channel open\n", pc->name);
+    JLOG_INFO("%s channel open", pc->name);
 }
 
 static void on_channel_close(void *userdata) {
     peer_connection_t *pc = (peer_connection_t *)userdata;
-    JLOG_INFO("%s channel close\n", pc->name);
+    JLOG_INFO("%s channel close", pc->name);
 }
 
 static void on_state_change(peer_connection_state_t state, void *userdata) {
     peer_connection_t *pc = (peer_connection_t *)userdata;
-    JLOG_INFO("%s state is changed: %d\n", pc->name, state);
+    JLOG_INFO("%s state is changed: %d", pc->name, state);
 }
+static void on_receiver_packet_loss(float fraction_loss, uint32_t total_loss, void *userdata) {
+    peer_connection_t *pc = (peer_connection_t *)userdata;
+    JLOG_INFO("%s receiver packet: fraction_loss(%f) total_loss(%d)", pc->name, fraction_loss, total_loss);
+}
+
 
 static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection_t *pc, peer_options_t *po, int role, peer_connection_t *pc_remote) {
 
@@ -52,12 +57,13 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
         return;
     }
-    peer_connection_set_datachannel_cb(pc, pc, on_channel_msg, on_channel_open, on_channel_close);
 
     if (strstr(argv[1], "create")) {
         peer_options_set_default(po, 57000, 58000);
         peer_connection_configure(pc, pc_name, role, po);
         peer_connection_set_cb_state_change(pc, on_state_change);
+        peer_connection_set_datachannel_cb(pc, pc, on_channel_msg, on_channel_open, on_channel_close);
+        peer_connection_set_cb_receiver_packet_loss(pc, on_receiver_packet_loss);
         peer_connection_init(pc);
     } else if (strstr(argv[1], "start")) {
             peer_connection_start(pc);

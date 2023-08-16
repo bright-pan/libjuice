@@ -18,6 +18,13 @@ typedef enum {
 
 } rtp_h264_type_t;
 
+typedef enum {
+    NALU_TYPE_IDRSLICE = 5,
+    NALU_TYPE_SPS = 7,
+    NALU_TYPE_PPS = 8
+
+} nalu_type_t;
+
 typedef struct {
 
     uint8_t type:5;
@@ -59,7 +66,7 @@ static int rtp_packetizer_encode_h264_single(rtp_packetizer_t *rtp_packetizer, u
     rtp_packet->header.ssrc = htonl(rtp_packetizer->ssrc);
 
     memcpy(rtp_packet->payload, buf, size);
-    rtp_packetizer->on_packet(rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
+    rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
     return 0;
 }
 
@@ -76,7 +83,7 @@ static int rtp_packetizer_encode_h264_fu_a(rtp_packetizer_t *rtp_packetizer, uin
     rtp_packet->header.seq_number = htons(rtp_packetizer->seq_number++);
     rtp_packet->header.timestamp = htonl(rtp_packetizer->timestamp);
     rtp_packet->header.ssrc = htonl(rtp_packetizer->ssrc);
-    rtp_packetizer->timestamp += 90000/25; // 25 FPS.
+    // rtp_packetizer->timestamp += 90000/25; // 25 FPS.
 
     uint8_t type = buf[0] & 0x1f;
     uint8_t nri = (buf[0] & 0x60) >> 5;
@@ -100,14 +107,14 @@ static int rtp_packetizer_encode_h264_fu_a(rtp_packetizer_t *rtp_packetizer, uin
             fu_header->e = 1;
             rtp_packet->header.markerbit = 1;
             memcpy(rtp_packet->payload + sizeof(nalu_header_t) + sizeof(fu_header_t), buf, size);
-            rtp_packetizer->on_packet(rtp_packetizer->buf, size + sizeof(rtp_header_t) + sizeof(nalu_header_t) + sizeof(fu_header_t), rtp_packetizer->user_data);
+            rtp_packetizer->on_packet((char* )rtp_packetizer->buf, size + sizeof(rtp_header_t) + sizeof(nalu_header_t) + sizeof(fu_header_t), rtp_packetizer->user_data);
             break;
         }
 
         fu_header->e = 0;
 
         memcpy(rtp_packet->payload + sizeof(nalu_header_t) + sizeof(fu_header_t), buf, FU_PAYLOAD_SIZE);
-        rtp_packetizer->on_packet(rtp_packetizer->buf, CONFIG_MTU, rtp_packetizer->user_data);
+        rtp_packetizer->on_packet((char* )rtp_packetizer->buf, CONFIG_MTU, rtp_packetizer->user_data);
         size -= FU_PAYLOAD_SIZE;
         buf += FU_PAYLOAD_SIZE;
 
@@ -132,8 +139,12 @@ static uint8_t* h264_find_nalu(uint8_t *buf_start, uint8_t *buf_end) {
     return buf_end;
 }
 
-static int rtp_packetizer_encode_h264(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
+static int is_pframe(nalu_type_t type) {
+    return type != NALU_TYPE_PPS && type != NALU_TYPE_SPS && type != NALU_TYPE_IDRSLICE;
+}
 
+static int rtp_packetizer_encode_h264(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
+    static nalu_type_t old_nalu_type = NALU_TYPE_SPS;
     uint8_t *buf_end = buf + size;
     uint8_t *pstart, *pend;
     size_t nalu_size = 0;
@@ -149,15 +160,27 @@ static int rtp_packetizer_encode_h264(rtp_packetizer_t *rtp_packetizer, uint8_t 
         while (pstart[nalu_size - 1] == 0x00)
             nalu_size--;
 
-        if (nalu_size <= RTP_PAYLOAD_SIZE) {
-
-            rtp_packetizer_encode_h264_single(rtp_packetizer, pstart, nalu_size);
-
+        nalu_header_t *nalu_header = (nalu_header_t *)pstart;
+        if (is_pframe(old_nalu_type)) {
+            if (!is_pframe(nalu_header->type)) {
+                if (rtp_packetizer->timestamp % 90000) {
+                    rtp_packetizer->timestamp += 90000;
+                }
+                rtp_packetizer->timestamp -= rtp_packetizer->timestamp % 90000;
+            } else {
+                rtp_packetizer->timestamp += 90000/30; // 30 FPS.
+            }
         } else {
-
+            if (is_pframe(nalu_header->type)) {
+                rtp_packetizer->timestamp += 90000/30; // 30 FPS.
+            }
+        }
+        old_nalu_type = nalu_header->type;
+        if (nalu_size <= RTP_PAYLOAD_SIZE) {
+            rtp_packetizer_encode_h264_single(rtp_packetizer, pstart, nalu_size);
+        } else {
             rtp_packetizer_encode_h264_fu_a(rtp_packetizer, pstart, nalu_size);
         }
-
     }
     return nalu_size;
 
@@ -178,12 +201,12 @@ static int rtp_packetizer_encode_generic(rtp_packetizer_t *rtp_packetizer, uint8
     rtp_header->ssrc = htonl(rtp_packetizer->ssrc);
     memcpy(rtp_packetizer->buf + sizeof(rtp_header_t), buf, size);
 
-    rtp_packetizer->on_packet(rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
-    
+    rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
+
     return 0;
 }
 
-void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, void (*on_packet)(uint8_t *packet, size_t bytes, void *user_data), void *user_data) {
+void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, void (*on_packet)(char *packet, int bytes, void *user_data), void *user_data) {
 
     rtp_packetizer->on_packet = on_packet;
     rtp_packetizer->user_data = user_data;

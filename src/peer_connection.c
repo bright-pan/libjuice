@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "peer_connection.h"
 #include "rtcp_packet.h"
@@ -19,10 +20,100 @@
 // Turn server config
 static juice_turn_server_t turn_server;
 
-static void peer_connection_set_cb_rtp_packet(uint8_t *packet, size_t bytes, void *user_data) {
+static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, size_t len) {
 
-    packet_fifo_t *fifo = (packet_fifo_t *)user_data;
-    packet_fifo_write(fifo, (char *)packet, bytes);
+    rtcp_header_t rtcp_header = {0};
+    size_t rtcp_len,offset = 0;
+    uint8_t *rtcp_buf;
+    if (len > sizeof(rtcp_header_t)) {
+        while(offset < len) {
+                rtcp_buf = buf + offset;
+                memcpy(&rtcp_header, rtcp_buf, sizeof(rtcp_header_t));
+                rtcp_len = (ntohs(rtcp_header.length) + 1) * 4;
+                // JLOG_INFO("parse rtcp[%d]:", rtcp_len);
+                // JLOG_INFO_DUMP_HEX(rtcp_buf, rtcp_len);
+                if (offset + rtcp_len <= len) {
+                    switch(rtcp_header.type) {
+                        case RTCP_RR: {
+                            if(rtcp_header.rc > 0) {
+                                rtcp_rr_t rtcp_rr = rtcp_packet_parse_rr(rtcp_buf);
+                                uint32_t fraction = ntohl(rtcp_rr.report_block[0].flcnpl) >> 24;
+                                uint32_t total = ntohl(rtcp_rr.report_block[0].flcnpl) & 0x00FFFFFF;
+                                if(pc->cb_receiver_packet_loss && fraction > 0) {
+                                    pc->cb_receiver_packet_loss((float)fraction/256.0, total, pc);
+                                }
+                            }
+                            break;
+                        }
+                        case RTCP_RTPFB: {
+                            switch (rtcp_header.rc) {
+                                case RTCP_FMT_RTPFB_NACK: {
+                                    rtcp_rtpfb_nack_t rtpfb_nack = rtcp_packet_parse_rtpfb_nack(rtcp_buf);
+                                    uint32_t ssrc_ps = ntohl(rtpfb_nack.nack_block[0].ssrc_ps);
+                                    uint32_t ssrc_ms = ntohl(rtpfb_nack.nack_block[0].ssrc_ms);
+                                    uint16_t pid = ntohs(rtpfb_nack.nack_block[0].pid);
+                                    uint16_t lostmap = ntohs(rtpfb_nack.nack_block[0].lostmap);
+                                    JLOG_INFO("pid:%d, lostmap:%04X, ssrc_ps:%d, ssrc_ms:%d", pid, lostmap, ssrc_ps, ssrc_ms);
+                                    break;
+                                }
+                                default: {
+                                    JLOG_ERROR("unknow rtpfb fmt[%d] for parse", rtcp_header.type);
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                        case RTCP_PSFB: {
+                            switch (rtcp_header.rc) {
+                                case RTCP_FMT_PSFB_PLI: {
+                                    rtcp_psfb_pli_t psfb_pli = rtcp_packet_parse_psfb_pli(rtcp_buf);
+                                    uint32_t ssrc_ps = ntohl(psfb_pli.pli_block[0].ssrc_ps);
+                                    uint32_t ssrc_ms = ntohl(psfb_pli.pli_block[0].ssrc_ms);
+                                    JLOG_INFO("ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
+                                    break;
+                                }
+                                case RTCP_FMT_PSFB_REMB: {
+                                    rtcp_psfb_remb_t psfb_remb = rtcp_packet_parse_psfb_remb(rtcp_buf);
+                                    uint32_t ssrc_ps = ntohl(psfb_remb.remb_block[0].ssrc_ps);
+                                    uint32_t ssrc_ms = ntohl(psfb_remb.remb_block[0].ssrc_ms);
+                                    uint32_t remb = ntohl(psfb_remb.remb_block[0].remb);
+                                    uint32_t ssrc_feedback = ntohl(psfb_remb.remb_block[0].ssrc_feedback);
+                                    br_union_t br;
+                                    br.value = ntohl(psfb_remb.remb_block[0].br.value);
+                                    JLOG_DEBUG("ssrc_ps:%d, ssrc_ms:%d, remb:%08X, num_ssrc:%d, br: %fkBps, ssrc_feedback:%d",
+                                               ssrc_ps, ssrc_ms, remb, br.s.num_ssrc, pow(2, br.s.exp) * br.s.mantissa / 1000, ssrc_feedback);
+                                    break;
+                                }
+                                default: {
+                                    JLOG_ERROR("unknow psfb fmt[%d] for parse", rtcp_header.type);
+                                    JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len);
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                        default: {
+                            JLOG_ERROR("unknow rtcp type[%d] parse", rtcp_header.type);
+                            JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len);
+                            break;
+                        }
+                    }
+                    offset += rtcp_len;
+                } else {
+                    break;
+                }
+            }
+    } else {
+        JLOG_ERROR("parse error[%d]", len);
+    }
+}
+
+static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *user_data) {
+
+    peer_connection_t *pc = user_data;
+    // packet_fifo_t *fifo = (packet_fifo_t *)user_data;
+    // packet_fifo_write(fifo, (char *)packet, bytes);
+    peer_connection_send_rtp_packet(pc, packet, bytes);
 }
 #define PER_TIMEOUT 100 //ms
 
@@ -167,6 +258,7 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
             if (ret == srtp_err_status_ok) {
                 // JLOG_INFO("rtcp packet[%d]:", bytes);
                 // JLOG_INFO_DUMP_HEX(buf, bytes);
+                peer_connection_incoming_rtcp(pc, (uint8_t *)buf, bytes);
             } else {
                 JLOG_INFO("invalid[%d] rtcp packet[%d]:", ret, size);
                 JLOG_INFO_DUMP_HEX(data, size);
@@ -193,28 +285,6 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
     JLOG_INFO( "%s recv other: %ld", pc->name, size);
     packet_fifo_write(&pc->other_fifo, (char *)data, size);
 }
-
-/*
-static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, size_t len) {
-
-  // RtcpHeader rtcp_header = {0};
-  // memcpy(&rtcp_header, buf, sizeof(rtcp_header));
-  // switch(rtcp_header.type) {
-  //   case RTCP_RR:
-  //     if(rtcp_header.rc > 0) {
-  //       RtcpRr rtcp_rr = rtcp_packet_parse_rr(buf);
-  //       uint32_t fraction = ntohl(rtcp_rr.report_block[0].flcnpl) >> 24;
-  //       uint32_t total = ntohl(rtcp_rr.report_block[0].flcnpl) & 0x00FFFFFF;
-  //       if(pc->on_receiver_packet_loss && fraction > 0) {
-  //         pc->on_receiver_packet_loss((float)fraction/256.0, total, pc->user_data);
-  //       }
-  //     }
-  //     break;
-  //   default:
-  //     break;
-  // }
-}
-*/
 
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end) {
   // juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
@@ -450,18 +520,6 @@ void peer_connection_loop(void *param) {
                 if (recv_count > 0) {
                     sctp_incoming_data(&pc->sctp, buf, recv_count);
                 }
-                //send fifo
-                while (1) {
-                    recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
-                    if (recv_count > 0) {
-                        // JLOG_INFO_DUMP_HEX(buf, recv_count);
-                        ret = peer_connection_send_rtp_packet(pc, buf, recv_count);
-                        // JLOG_INFO("send rtp[%d], ret=%d", recv_count, ret);
-                    } else {
-                        // no data
-                        break;
-                    }
-                }
                 break;
             }
             case PEER_CONNECTION_FAILED:
@@ -473,7 +531,7 @@ void peer_connection_loop(void *param) {
             default:
             break;
         }
-        aos_msleep(10);
+        aos_msleep(1);
     }
 }
 
@@ -526,7 +584,7 @@ void peer_connection_init(peer_connection_t *pc) {
         pc->video_stream->outgoing_rb = pc->video_rb;
     #else
         rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
-        peer_connection_set_cb_rtp_packet, &pc->video_fifo);
+        peer_connection_set_cb_rtp_packet, pc);
     #endif
     }
 
