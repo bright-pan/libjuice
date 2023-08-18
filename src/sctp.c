@@ -156,7 +156,7 @@ void sctp_incoming_data(sctp_t *sctp, char *buf, size_t len) {
     if (!sctp)
         return;
 
-    JLOG_INFO_DUMP_HEX(buf, len);
+    JLOG_DEBUG_DUMP_HEX(buf, len, "-------------stcp incoming data[%d]-----------", len);
 #ifdef HAVE_USRSCTP
     usrsctp_conninput(sctp, buf, len, 0);
 #else

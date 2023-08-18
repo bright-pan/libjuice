@@ -8,8 +8,10 @@
 #include <string.h>
 
 #include "rtp.h"
+#include "rtp_frame.h"
 #include "socket.h"
 #include "log.h"
+
 
 typedef enum {
 
@@ -27,17 +29,32 @@ typedef enum {
 
 typedef struct {
 
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint8_t f:1;
+    uint8_t nri:2;
+    uint8_t type:5;
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     uint8_t type:5;
     uint8_t nri:2;
     uint8_t f:1;
+#endif
+
 } nalu_header_t;
 
 typedef struct {
 
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint8_t s:1;
+    uint8_t e:1;
+    uint8_t r:1;
+    uint8_t type:5;
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     uint8_t type:5;
     uint8_t r:1;
     uint8_t e:1;
     uint8_t s:1;
+#endif
+
 } fu_header_t;
 
 #define RTP_PAYLOAD_SIZE (CONFIG_MTU - sizeof(rtp_header_t))

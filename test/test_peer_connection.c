@@ -157,13 +157,11 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
             if (strstr(argv[2], "raw") && atoi(argv[2]) <= BUFFER_SIZE) {
                 memset(buffer, '\0', BUFFER_SIZE);
                 int ret = peer_connection_dtls_recv(&pc->dtls_srtp, buffer, atoi(argv[2]));
-                JLOG_INFO("%s recv: %s, %d", pc->name, buffer, ret);
-                JLOG_INFO_DUMP_HEX(buffer, ret);
+                JLOG_INFO_DUMP_HEX(buffer, ret, "------------%s recv: %s, %d---------------", pc->name, buffer, ret);
             } else if (strstr(argv[2], "dtls") && atoi(argv[2]) <= BUFFER_SIZE) {
                 memset(buffer, '\0', BUFFER_SIZE);
                 int ret = dtls_srtp_read(&pc->dtls_srtp, buffer, atoi(argv[2]));
-                JLOG_INFO("%s recv: %s, %d", pc->name, buffer, ret);
-                JLOG_INFO_DUMP_HEX(buffer, ret);
+                JLOG_INFO_DUMP_HEX(buffer, ret, "------------%s recv: %s, %d-----------", pc->name, buffer, ret);
             } else {
                 JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
             }

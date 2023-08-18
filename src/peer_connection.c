@@ -11,14 +11,44 @@
 
 #include "peer_connection.h"
 #include "rtcp_packet.h"
+#include "rtp_frame.h"
 
 // #define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
 
 
 #define MIN(a, b)  (((a) < (b)) ? (a) : (b))
 
+#define bits_mask(i) (1 << (i))
+
 // Turn server config
 static juice_turn_server_t turn_server;
+
+int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
+    int ret = -1;
+    rtp_frame_t *frame = rtp_frame_find(pid);
+    if (frame) {
+        JLOG_INFO("pid[%d]:%d", pid, frame->bytes);
+        juice_send(pc->juice_agent, frame->packet, frame->bytes);
+        if (ret == JUICE_ERR_SUCCESS) {
+            return frame->bytes;
+        }
+    }
+    return ret;
+}
+
+void peer_connection_rtp_packet_lost_process(peer_connection_t *pc, int pid, uint16_t lostmap) {
+
+    peer_connection_send_rtp_frame(pc, pid);
+
+    if (lostmap) {
+        for (int i = 0; i < 16; i++) {
+            pid++;
+            if (lostmap & bits_mask(i)) {
+                peer_connection_send_rtp_frame(pc, pid);
+            }
+        }
+    }
+}
 
 static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, size_t len) {
 
@@ -54,6 +84,7 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                                     uint16_t pid = ntohs(rtpfb_nack.nack_block[0].pid);
                                     uint16_t lostmap = ntohs(rtpfb_nack.nack_block[0].lostmap);
                                     JLOG_INFO("pid:%d, lostmap:%04X, ssrc_ps:%d, ssrc_ms:%d", pid, lostmap, ssrc_ps, ssrc_ms);
+                                    peer_connection_rtp_packet_lost_process(pc, pid, lostmap);
                                     break;
                                 }
                                 default: {
@@ -80,21 +111,26 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                                     uint32_t ssrc_feedback = ntohl(psfb_remb.remb_block[0].ssrc_feedback);
                                     br_union_t br;
                                     br.value = ntohl(psfb_remb.remb_block[0].br.value);
+                                    uint32_t num_ssrc = psfb_remb.remb_block[0].br.s.num_ssrc;
+                                    uint32_t exp = psfb_remb.remb_block[0].br.s.exp;
+                                    uint32_t mantissa = psfb_remb.remb_block[0].br.s.mantissa;
+                                    // uint32_t num_ssrc = psfb_remb.remb_block[0].num_ssrc;
+                                    // uint32_t exp = psfb_remb.remb_block[0].exp;
+                                    // uint32_t mantissa = psfb_remb.remb_block[0].mantissa;
                                     JLOG_DEBUG("ssrc_ps:%d, ssrc_ms:%d, remb:%08X, num_ssrc:%d, br: %fkBps, ssrc_feedback:%d",
-                                               ssrc_ps, ssrc_ms, remb, br.s.num_ssrc, pow(2, br.s.exp) * br.s.mantissa / 1000, ssrc_feedback);
+                                               ssrc_ps, ssrc_ms, remb, num_ssrc, pow(2, exp) * mantissa / 1000, ssrc_feedback);
+
                                     break;
                                 }
                                 default: {
-                                    JLOG_ERROR("unknow psfb fmt[%d] for parse", rtcp_header.type);
-                                    JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len);
+                                    JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "-----------unknow psfb fmt[%d] for parse, rtcp_buf[%d]------------", rtcp_header.type, rtcp_len);
                                     break;
                                 }
                             }
                             break;
                         }
                         default: {
-                            JLOG_ERROR("unknow rtcp type[%d] parse", rtcp_header.type);
-                            JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len);
+                            JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "--------------unknow rtcp type[%d] parse, rtcp_buf[%d]-----------", rtcp_header.type);
                             break;
                         }
                     }
@@ -260,8 +296,7 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
                 // JLOG_INFO_DUMP_HEX(buf, bytes);
                 peer_connection_incoming_rtcp(pc, (uint8_t *)buf, bytes);
             } else {
-                JLOG_INFO("invalid[%d] rtcp packet[%d]:", ret, size);
-                JLOG_INFO_DUMP_HEX(data, size);
+                JLOG_INFO_DUMP_HEX(data, size, "--------------invalid[%d] rtcp packet[%d]---------------", ret, size);
             }
         } else {
             ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, buf, &bytes);
@@ -269,8 +304,7 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
                 // JLOG_INFO("rtp packet[%d]:", bytes);
                 // JLOG_INFO_DUMP_HEX(buf, bytes);
             } else {
-                JLOG_INFO("invalid[%d] rtp packet[%d]:", ret, size);
-                JLOG_INFO_DUMP_HEX(data, size);
+                JLOG_INFO_DUMP_HEX(data, size, "--------------invalid[%d] rtp packet[%d]---------------", ret, size);
             }
         }
         //packet_fifo_write(&pc->rtp_fifo, (char *)data, size);
@@ -400,6 +434,9 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     packet_fifo_reset(&pc->dtls_fifo);
     packet_fifo_reset(&pc->other_fifo);
     packet_fifo_reset(&pc->rtp_fifo);
+
+    rt_frame_delete_timer_init(1000);
+
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }
 
@@ -649,6 +686,10 @@ void peer_connection_start(peer_connection_t *pc) {
 
 int peer_connection_send_rtp_packet(peer_connection_t *pc, char *packet, int bytes) {
     dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
+    rtp_header_t *rtp_header = (rtp_header_t *)packet;
+    int seq_number = ntohs(rtp_header->seq_number);
+    // JLOG_INFO("add rtp frame[%d]", seq_number);
+    rtp_frame_add(seq_number, packet, bytes);
     int ret = juice_send(pc->juice_agent, packet, bytes);
     if (ret == JUICE_ERR_SUCCESS) {
         return bytes;

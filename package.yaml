@@ -41,6 +41,7 @@ build_config:
   internal_include:
     - src
     - include/juice
+    - uthash/include
   include:
     - include
 
@@ -78,6 +79,7 @@ source_file:
   - "src/sdp.c"
   - "src/sctp.c"
   - "src/paho_mqtt_udp.c"
+  - "src/rtp_frame.c"
   - "test/*.c"
 
 ## 第五部分：配置信息

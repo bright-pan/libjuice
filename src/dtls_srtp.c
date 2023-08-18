@@ -394,7 +394,7 @@ static void dtls_srtp_key_derivation(void *context, mbedtls_ssl_key_export_type 
 
     JLOG_INFO("tls_prf_type: %d selected ciphersuite: %s, srtp profile: %s", tls_prf_type, suite_info->private_name,
                mbedtls_ssl_get_srtp_profile_as_string(dtls_srtp->ssl.private_dtls_srtp_info.private_chosen_dtls_srtp_profile));
-    JLOG_INFO_DUMP_HEX(secret, secret_len);
+    JLOG_INFO_DUMP_HEX(secret, secret_len, "----------------secret[%d]----------------------", secret_len);
 
 	if (dtls_srtp->ssl.private_dtls_srtp_info.private_chosen_dtls_srtp_profile != MBEDTLS_TLS_SRTP_AES128_CM_HMAC_SHA1_80)
     {
@@ -421,10 +421,10 @@ static void dtls_srtp_key_derivation(void *context, mbedtls_ssl_key_export_type 
 	const unsigned char *serverSalt = clientSalt + saltSize;
 
     JLOG_INFO("client key[%d],  client salt[%d], server key[%d], server salt[%d]", keySize, saltSize, keySize, saltSize);
-    JLOG_INFO_DUMP_HEX(clientKey, keySize);
-    JLOG_INFO_DUMP_HEX(clientSalt, saltSize);
-    JLOG_INFO_DUMP_HEX(serverKey, keySize);
-    JLOG_INFO_DUMP_HEX(serverSalt, saltSize);
+    JLOG_INFO_DUMP_HEX(clientKey, keySize, "------------clientKey[%d]--------------", keySize);
+    JLOG_INFO_DUMP_HEX(clientSalt, saltSize, "------------clientSalt[%d]--------------", keySize);
+    JLOG_INFO_DUMP_HEX(serverKey, keySize, "------------serverKey[%d]--------------", keySize);
+    JLOG_INFO_DUMP_HEX(serverSalt, saltSize, "------------serverSalt[%d]--------------", keySize);
 
     memcpy(dtls_srtp->remote_policy_key, serverKey, keySize);
     memcpy(dtls_srtp->remote_policy_key + keySize, serverSalt, saltSize);

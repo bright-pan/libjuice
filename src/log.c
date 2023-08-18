@@ -25,7 +25,7 @@
 #endif
 
 #define BUFFER_SIZE 4096
-#define DUMP_IN_LINE 20
+#define PRINT_COLS 20
 
 static const char *log_level_names[] = {"VERBOSE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
 
@@ -137,43 +137,80 @@ __exit:
 	mutex_unlock(&log_mutex);
 }
 
-void snprintf_hex(char *msg, size_t msg_len, const char *b, size_t len, const size_t in_line, const char *prefix)
+int is_row(size_t i, size_t cols) {
+	return i % cols ? 0 : 1;
+}
+
+void snprintf_hex(char *msg, size_t msg_len, const char *b, size_t len, const size_t cols, const char *prefix, const char *suffix)
 {
+	int ret;
     size_t i = 0;
     const char *end = b + len;
+
     if (prefix == NULL) {
         prefix = "";
     }
+	size_t offset = 0;
 
-    while (i < len) {
-        if (i % in_line ? 0 : 1) {
-            snprintf(msg + i, msg_len, "\n%s", prefix);
+    while (i < len && offset < msg_len) {
+		// prefix content
+        if (is_row(i, cols)) {
+			ret = snprintf(msg + offset, msg_len - offset,  "%s[%03ld - %03ld] ", prefix, i, i + cols);
+            if (ret > 0) {
+				offset += ret;
+			} else {
+				break;
+			}
         }
-        snprintf(msg + i, msg_len, "%02X ", *(b+i));
-		i++;
+		// hex content
+        ret = snprintf(msg + offset, msg_len - offset, "%02X ", *(b+i++));
+		if (ret > 0) {
+			offset += ret;
+		} else {
+			break;
+		}
+		// suffix content
+		if (is_row(i, cols)) {
+    		ret = snprintf(msg + offset, msg_len - offset, "%s", suffix);
+			if (ret > 0) {
+				offset += ret;
+			} else {
+				break;
+			}
+		}
     }
-    snprintf(msg + i, msg_len, "\n");
+	// suffix content
+	if (!is_row(len, cols)) {
+		snprintf(msg + offset, msg_len - offset, "%s", suffix);
+	}
 }
 
-void fprintf_hex(FILE *file, const char *b, size_t len, const size_t in_line, const char *prefix, const char *suffix)
+void fprintf_hex(FILE *file, const char *b, size_t len, const size_t cols, const char *prefix, const char *suffix)
 {
     size_t i = 0;
-
     if (prefix == NULL) {
         prefix = "";
     }
 
     while (i < len) {
-        if (i % in_line ? 0 : 1) {
-            fprintf(file, "\n%s", prefix);
+		// prefix content
+        if (is_row(i, cols)) {
+            fprintf(file, "%s[%03ld - %03ld] ", prefix, i, i + cols);
         }
-        fprintf(file, "%02X ", *(b+i));
-		i++;
+		// hex content
+        fprintf(file, "%02X ", *(b+i++));
+		// suffix content
+		if (is_row(i, cols)) {
+            fprintf(file, suffix);
+		}
     }
-    fprintf(file, "%s", suffix);
+	// suffix content
+	if (!is_row(len, cols)) {
+		fprintf(file, suffix);
+	}
 }
 
-void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, const void *buf, int length) {
+void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, const void *buf, int length, const char *fmt, ...) {
 	if (!juice_log_is_enabled(level))
 		return;
 
@@ -193,35 +230,66 @@ void juice_log_dump_hex(juice_log_level_t level, const char *file, int line, con
 	if (log_cb) {
 		char message[BUFFER_SIZE];
 		char prefix[128];
-		int len = 0;
+		int ret, len = 0;
 #if !RELEASE
 		len = snprintf(prefix, 128, "%s:%d: ", filename, line);
 		if (len < 0)
 			goto __exit;
 #endif
-		snprintf_hex(message, BUFFER_SIZE, buf, length, DUMP_IN_LINE, prefix);
+		if (len < BUFFER_SIZE) {
+			va_list args;
+			va_start(args, fmt);
+			ret = vsnprintf(message + len, BUFFER_SIZE - len, fmt, args);
+			va_end(args);
+			if (ret < 0) {
+				len = BUFFER_SIZE;
+			} else {
+				len += ret;
+			}
+		}
 
+		snprintf_hex(message + len, BUFFER_SIZE - len, buf, length, PRINT_COLS, prefix, use_color() ? "\x1B[0m\x1B[0K\n" : "\n");
 		log_cb(level, message);
 
 	} else {
 		char message[BUFFER_SIZE];
 		char prefix[128];
-		int len = 0;
+		int ret, len = 0;
 		time_t t = time(NULL);
 		struct tm lt;
 		char buffer[16];
 		if (get_localtime(&t, &lt) != 0 || strftime(buffer, 16, "%H:%M:%S", &lt) == 0)
 			buffer[0] = '\0';
 
-		if (use_color()) {
-			snprintf(prefix, 128, "%s%s %-7s %s:%d: ", log_level_colors[level], buffer, log_level_names[level], filename, line);
+		snprintf(prefix, 128, "%s%s %-7s %s:%d: ", use_color() ? log_level_colors[level] : "", buffer, log_level_names[level], filename, line);
+		ret = snprintf(message + len, BUFFER_SIZE - len, "%s", prefix);
+		if (ret > 0) {
+			len += ret;
+			va_list args;
+			va_start(args, fmt);
+			ret = vsnprintf(message + len, BUFFER_SIZE - len, fmt, args);
+			va_end(args);
+			if (ret > 0) {
+				len += ret;
+			} else {
+				len = BUFFER_SIZE;
+			}
+			ret = snprintf(message + len, BUFFER_SIZE - len, "%s", use_color() ? "\x1B[0m\x1B[0K\n" : "\n");			
+			if (ret > 0) {
+				len += ret;
+			} else {
+				len = BUFFER_SIZE;
+			}
+			//fprintf(stdout, message);
 		} else {
-			snprintf(prefix, 128, "%s %-7s %s:%d: ", buffer, log_level_names[level], filename, line);
+			len = BUFFER_SIZE;
 		}
 
 #if !RELEASE
-		fprintf_hex(stdout, buf, length, DUMP_IN_LINE, prefix, use_color() ? "\x1B[0m\x1B[0K\n" : "\n");
+		// fprintf_hex(stdout, buf, length, PRINT_COLS, prefix, use_color() ? "\x1B[0m\x1B[0K\n" : "\n");
+		snprintf_hex(message + len, BUFFER_SIZE - len, buf, length, PRINT_COLS, prefix, use_color() ? "\x1B[0m\x1B[0K\n" : "\n");
 #endif
+		fprintf(stdout, message);
 		fflush(stdout);
 	}
 
