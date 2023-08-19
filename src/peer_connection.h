@@ -18,6 +18,7 @@ extern "C" {
 #include "codec.h"
 // #include "config.h"
 #include "rtp.h"
+#include "rtp_frame.h"
 // #include "rtcp_packet.h"
 
 
@@ -78,6 +79,9 @@ typedef struct peer_connect {
     packet_fifo_t audio_fifo; //send audio
     packet_fifo_t video_fifo; //send video
     packet_fifo_t data_fifo; //send data
+
+    rtp_frame_t *rtp_frame_cache_list;
+    rtp_frame_t *rtp_frame_send_list;
     // Buffer *audio_rb[2];
     // Buffer *video_rb[2];
     // Buffer *data_rb[2];

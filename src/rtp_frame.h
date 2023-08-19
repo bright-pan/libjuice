@@ -21,24 +21,28 @@
 #define uthash_free(ptr, sz) juice_free(ptr)
 
 typedef struct {
-    int seq_number;                    /* key */
+    int seq;                    /* key */
     char *packet;
     int bytes;
-    int count;
+    int timeout_count;
+    int resend_count;
     UT_hash_handle hh;         /* makes this structure hashable */
 } rtp_frame_t;
 
-int rtp_frame_add(int seq_number, const char *packet, int bytes);
-rtp_frame_t *rtp_frame_find(int seq_number);
-void rtp_frame_delete(rtp_frame_t *frame);
-void rtp_frame_delete_all(void);
-void rtp_frame_reset(void);
-int rtp_frame_delete_by_seq_number(int seq_number);
-int rtp_frame_count(void);
-void rtp_frame_sort_by_bytes(void);
-void rtp_frame_sort_by_seq_number(void);
-void rtp_frame_print_all(void);
-void rtp_frame_print_by_seq_number(int seq_number);
-int rt_frame_delete_timer_init(int interval);
+rtp_frame_t *rtp_frame_malloc(int seq, const char *packet, int bytes);
+void rtp_frame_free(rtp_frame_t *frame);
+
+int rtp_frame_list_insert(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame);
+void rtp_frame_list_pop(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame);
+rtp_frame_t *rtp_frame_list_find_by_seq(rtp_frame_t **rtp_frame_list, int seq_number);
+void rtp_frame_list_delete(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame);
+void rtp_frame_list_delete_all(rtp_frame_t **rtp_frame_list);
+void rtp_frame_list_reset(rtp_frame_t **rtp_frame_list);
+int rtp_frame_list_delete_by_seq_number(rtp_frame_t **rtp_frame_list, int seq_number);
+int rtp_frame_list_count(rtp_frame_t **rtp_frame_list);
+void rtp_frame_list_sort_by_bytes(rtp_frame_t **rtp_frame_list);
+void rtp_frame_list_sort_by_seq_number(rtp_frame_t **rtp_frame_list);
+void rtp_frame_list_print_all(rtp_frame_t **rtp_frame_list);
+void rtp_frame_list_print_by_seq_number(rtp_frame_t **rtp_frame_list, int seq_number);
 
 #endif

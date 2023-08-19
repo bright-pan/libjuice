@@ -60,4 +60,11 @@
 
 #define juice_assert(ptr)        aos_assert(ptr)
 
+
+#define RTP_FRAME_INTERVAL 1 //1000/30)
+#define RTP_FRAME_TIMEOUT 1500
+#define RTP_FRAME_TIMEOUT_COUNT (RTP_FRAME_TIMEOUT / RTP_FRAME_INTERVAL)
+#define RTP_FRAME_RESEND_COUNT 3
+
+
 #endif

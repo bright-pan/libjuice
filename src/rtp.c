@@ -69,6 +69,10 @@ int rtp_packet_validate(uint8_t *packet, size_t size) {
   return ((rtp_header->type < 64) || (rtp_header->type >= 96));
 }
 
+static int is_pframe(nalu_type_t type) {
+    return type != NALU_TYPE_PPS && type != NALU_TYPE_SPS && type != NALU_TYPE_IDRSLICE;
+}
+
 static int rtp_packetizer_encode_h264_single(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
     rtp_packet_t *rtp_packet = (rtp_packet_t *)rtp_packetizer->buf;
 
@@ -81,6 +85,11 @@ static int rtp_packetizer_encode_h264_single(rtp_packetizer_t *rtp_packetizer, u
     rtp_packet->header.seq_number = htons(rtp_packetizer->seq_number++);
     rtp_packet->header.timestamp = htonl(rtp_packetizer->timestamp);
     rtp_packet->header.ssrc = htonl(rtp_packetizer->ssrc);
+
+    nalu_header_t *nalu_header = (nalu_header_t *)buf;
+    if (is_pframe(nalu_header->type)) {
+        rtp_packet->header.markerbit = 1;
+    }
 
     memcpy(rtp_packet->payload, buf, size);
     rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
@@ -156,9 +165,6 @@ static uint8_t* h264_find_nalu(uint8_t *buf_start, uint8_t *buf_end) {
     return buf_end;
 }
 
-static int is_pframe(nalu_type_t type) {
-    return type != NALU_TYPE_PPS && type != NALU_TYPE_SPS && type != NALU_TYPE_IDRSLICE;
-}
 
 static int rtp_packetizer_encode_h264(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
     static nalu_type_t old_nalu_type = NALU_TYPE_SPS;

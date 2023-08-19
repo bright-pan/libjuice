@@ -11,7 +11,6 @@
 
 #include "peer_connection.h"
 #include "rtcp_packet.h"
-#include "rtp_frame.h"
 
 // #define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
 
@@ -22,21 +21,27 @@
 
 // Turn server config
 static juice_turn_server_t turn_server;
+static aos_timer_t rtp_frame_timer;
 
 int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
     int ret = -1;
-    rtp_frame_t *frame = rtp_frame_find(pid);
+    rtp_frame_t *frame = rtp_frame_list_find_by_seq(&pc->rtp_frame_cache_list, pid);
     if (frame) {
-        JLOG_INFO("pid[%d]:%d", pid, frame->bytes);
+        JLOG_INFO("resend pid[%d]:%d", pid, frame->bytes);
+        // frame->timeout_count--;
         juice_send(pc->juice_agent, frame->packet, frame->bytes);
         if (ret == JUICE_ERR_SUCCESS) {
-            return frame->bytes;
+            ret = frame->bytes;
+        }
+        // resend
+        if (frame->resend_count-- < 0) {
+            rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
         }
     }
     return ret;
 }
 
-void peer_connection_rtp_packet_lost_process(peer_connection_t *pc, int pid, uint16_t lostmap) {
+void peer_connection_rtp_frame_lost_process(peer_connection_t *pc, int pid, uint16_t lostmap) {
 
     peer_connection_send_rtp_frame(pc, pid);
 
@@ -83,8 +88,8 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                                     uint32_t ssrc_ms = ntohl(rtpfb_nack.nack_block[0].ssrc_ms);
                                     uint16_t pid = ntohs(rtpfb_nack.nack_block[0].pid);
                                     uint16_t lostmap = ntohs(rtpfb_nack.nack_block[0].lostmap);
-                                    JLOG_INFO("pid:%d, lostmap:%04X, ssrc_ps:%d, ssrc_ms:%d", pid, lostmap, ssrc_ps, ssrc_ms);
-                                    peer_connection_rtp_packet_lost_process(pc, pid, lostmap);
+                                    // JLOG_INFO("pid:%d, lostmap:%04X, ssrc_ps:%d, ssrc_ms:%d", pid, lostmap, ssrc_ps, ssrc_ms);
+                                    peer_connection_rtp_frame_lost_process(pc, pid, lostmap);
                                     break;
                                 }
                                 default: {
@@ -147,10 +152,42 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
 static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *user_data) {
 
     peer_connection_t *pc = user_data;
-    // packet_fifo_t *fifo = (packet_fifo_t *)user_data;
-    // packet_fifo_write(fifo, (char *)packet, bytes);
-    peer_connection_send_rtp_packet(pc, packet, bytes);
+    dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
+    // JLOG_INFO("add rtp frame[%d]", seq_number);
+    rtp_frame_t *frame = rtp_frame_malloc(ntohs(((rtp_header_t *)packet)->seq_number), packet, bytes);
+    rtp_frame_list_insert(&pc->rtp_frame_send_list, frame);
 }
+
+static void peer_connection_rtp_frame_entry(void *args)
+{
+    rtp_frame_t *frame;
+    rtp_frame_t *tmp;
+    peer_connection_t *pc = args;
+
+    while (1) {
+        HASH_ITER(hh, pc->rtp_frame_send_list, frame, tmp) {
+            //rtp_frame_print(frame);
+            rtp_frame_list_pop(&pc->rtp_frame_send_list, frame);
+            juice_send(pc->juice_agent, frame->packet, frame->bytes);
+            frame->resend_count--;
+            rtp_frame_list_insert(&pc->rtp_frame_cache_list, frame);
+        }
+        HASH_ITER(hh, pc->rtp_frame_cache_list, frame, tmp) {
+            if (frame->timeout_count-- <= 0) {
+                rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
+            }
+        }
+        aos_msleep(RTP_FRAME_INTERVAL);
+    }
+}
+
+aos_task_t rtp_frame_task_t;
+
+void peer_connection_rtp_frame_task_init(peer_connection_t *pc) {
+    aos_task_new_ext(&rtp_frame_task_t, "rtp_frame", peer_connection_rtp_frame_entry,
+                    pc, pc->stack_size, 31);
+}
+
 #define PER_TIMEOUT 100 //ms
 
 #define TIMEOUT_COUNT(timeout, per) (((timeout) / (per)) ? ((timeout) / (per)) : 1)
@@ -435,7 +472,9 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     packet_fifo_reset(&pc->other_fifo);
     packet_fifo_reset(&pc->rtp_fifo);
 
-    rt_frame_delete_timer_init(1000);
+    pc->rtp_frame_cache_list = NULL;
+    pc->rtp_frame_send_list = NULL;
+    peer_connection_rtp_frame_task_init(pc);
 
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }
@@ -683,21 +722,21 @@ void peer_connection_start(peer_connection_t *pc) {
   STATE_CHANGED(pc, PEER_CONNECTION_START);
   // pc->b_offer_created = 0;
 }
-
-int peer_connection_send_rtp_packet(peer_connection_t *pc, char *packet, int bytes) {
+/*
+void peer_connection_send_rtp_packet(peer_connection_t *pc, char *packet, int bytes) {
     dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
     rtp_header_t *rtp_header = (rtp_header_t *)packet;
     int seq_number = ntohs(rtp_header->seq_number);
     // JLOG_INFO("add rtp frame[%d]", seq_number);
-    rtp_frame_add(seq_number, packet, bytes);
-    int ret = juice_send(pc->juice_agent, packet, bytes);
-    if (ret == JUICE_ERR_SUCCESS) {
-        return bytes;
-    } else {
-        return -1;
-    }
+    rtp_frame_add(&pc->rtp_frame_cache_list, seq_number, packet, bytes);
+    // int ret = juice_send(pc->juice_agent, packet, bytes);
+    // if (ret == JUICE_ERR_SUCCESS) {
+    //     return bytes;
+    // } else {
+    //     return -1;
+    // }
 }
-
+*/
 int peer_connection_send_rtcp_pil(peer_connection_t *pc, uint32_t ssrc) {
 
   // int ret = -1;

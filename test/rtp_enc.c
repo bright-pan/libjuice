@@ -182,6 +182,7 @@ static void rtp_enc_entry(void *param) {
                     pPack = &venc_stream.pstPack[iPackid];
                     // peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
+                    aos_msleep(1);
                     //send fifo
                     // while (1) {
                     //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
@@ -198,7 +199,7 @@ static void rtp_enc_entry(void *param) {
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             }
         }
-        aos_msleep(1);
+        aos_msleep(RTP_ENC_INTERVAL);
     }
 }
 
