@@ -24,9 +24,9 @@ static juice_turn_server_t turn_server;
 
 int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
     int ret = -1;
-    mutex_lock(&pc->rtp_frame_cache_mutex);
+    rwlock_rlock(&pc->rtp_frame_cache_rwlock);
     rtp_frame_t *frame = rtp_frame_list_find_by_seq(&pc->rtp_frame_cache_list, pid);
-    mutex_unlock(&pc->rtp_frame_cache_mutex);
+    rwlock_unlock(&pc->rtp_frame_cache_rwlock);
     if (frame) {
         JLOG_INFO("resend pid[%d]:%d", pid, frame->bytes);
         // frame->timeout_count--;
@@ -36,9 +36,9 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
         }
         // resend
         if (frame->resend_count-- < 0) {
-            mutex_lock(&pc->rtp_frame_cache_mutex);
+            rwlock_wlock(&pc->rtp_frame_cache_rwlock);
             rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
-            mutex_unlock(&pc->rtp_frame_cache_mutex);
+            rwlock_unlock(&pc->rtp_frame_cache_rwlock);
         }
     }
     return ret;
@@ -159,9 +159,9 @@ static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *use
     // JLOG_INFO("add rtp frame[%d]", seq_number);
     rtp_frame_t *frame = rtp_frame_malloc(ntohs(((rtp_header_t *)packet)->seq_number), packet, bytes);
     if (frame) {
-        mutex_lock(&pc->rtp_frame_send_mutex);
+        rwlock_wlock(&pc->rtp_frame_send_rwlock);
         rtp_frame_list_insert(&pc->rtp_frame_send_list, frame);
-        mutex_unlock(&pc->rtp_frame_send_mutex);
+        rwlock_unlock(&pc->rtp_frame_send_rwlock);
     }
 }
 
@@ -177,20 +177,20 @@ static void *rtp_process_thread_entry(void *args)
     while (1) {
         HASH_ITER(hh, pc->rtp_frame_send_list, frame, tmp) {
             //rtp_frame_print(frame);
-            mutex_lock(&pc->rtp_frame_send_mutex);
+            rwlock_wlock(&pc->rtp_frame_send_rwlock);
             rtp_frame_list_pop(&pc->rtp_frame_send_list, frame);
-            mutex_unlock(&pc->rtp_frame_send_mutex);
+            rwlock_unlock(&pc->rtp_frame_send_rwlock);
             juice_send(pc->juice_agent, frame->packet, frame->bytes);
             frame->resend_count--;
-            mutex_lock(&pc->rtp_frame_cache_mutex);
+            rwlock_wlock(&pc->rtp_frame_cache_rwlock);
             rtp_frame_list_insert(&pc->rtp_frame_cache_list, frame);
-            mutex_unlock(&pc->rtp_frame_cache_mutex);
+            rwlock_unlock(&pc->rtp_frame_cache_rwlock);
         }
         HASH_ITER(hh, pc->rtp_frame_cache_list, frame, tmp) {
             if (frame->timeout_count-- <= 0) {
-                mutex_lock(&pc->rtp_frame_cache_mutex);
+                rwlock_wlock(&pc->rtp_frame_cache_rwlock);
                 rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
-                mutex_unlock(&pc->rtp_frame_cache_mutex);
+                rwlock_unlock(&pc->rtp_frame_cache_rwlock);
             }
         }
         usleep(RTP_FRAME_INTERVAL*1000);
@@ -533,9 +533,9 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     packet_fifo_reset(&pc->rtp_fifo);
 
     pc->rtp_frame_cache_list = NULL;
-    mutex_init(&pc->rtp_frame_cache_mutex, 0);
+    rwlock_init(&pc->rtp_frame_cache_rwlock);
     pc->rtp_frame_send_list = NULL;
-    mutex_init(&pc->rtp_frame_send_mutex, 0);
+    rwlock_init(&pc->rtp_frame_send_rwlock);
 
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }

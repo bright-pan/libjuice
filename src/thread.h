@@ -82,6 +82,7 @@ static inline void thread_join_impl(thread_t t, thread_return_t *res) {
 #endif
 
 typedef pthread_mutex_t mutex_t;
+typedef pthread_rwlock_t rwlock_t;
 typedef pthread_attr_t thread_attr_t;
 typedef pthread_t thread_t;
 typedef void *thread_return_t;
@@ -98,6 +99,12 @@ int mutex_init_impl(mutex_t *m, int flags);
 #define mutex_lock(m) pthread_mutex_lock(m)
 #define mutex_unlock(m) (void)pthread_mutex_unlock(m)
 #define mutex_destroy(m) (void)pthread_mutex_destroy(m)
+
+#define rwlock_init(rwlock) pthread_rwlock_init(rwlock, NULL)
+#define rwlock_rlock(rwlock) pthread_rwlock_rdlock(rwlock)
+#define rwlock_wlock(rwlock) pthread_rwlock_wrlock(rwlock)
+#define rwlock_unlock(rwlock) pthread_rwlock_unlock(rwlock)
+#define rwlock_destroy(rwlock) pthread_rwlock_destroy(rwlock)
 
 extern thread_attr_t thread_attr_default;
 void thread_attr_init(thread_attr_t *attr, int prio, int ssize);

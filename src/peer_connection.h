@@ -81,9 +81,9 @@ typedef struct peer_connect {
     packet_fifo_t data_fifo; //send data
 
     rtp_frame_t *rtp_frame_cache_list;
-    mutex_t rtp_frame_cache_mutex;
+    rwlock_t rtp_frame_cache_rwlock;
     rtp_frame_t *rtp_frame_send_list;
-    mutex_t rtp_frame_send_mutex;
+    rwlock_t rtp_frame_send_rwlock;
     // Buffer *audio_rb[2];
     // Buffer *video_rb[2];
     // Buffer *data_rb[2];
