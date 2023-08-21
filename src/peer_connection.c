@@ -160,7 +160,9 @@ static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *use
     rtp_frame_t *frame = rtp_frame_malloc(ntohs(((rtp_header_t *)packet)->seq_number), packet, bytes);
     if (frame) {
         rwlock_wlock(&pc->rtp_frame_send_rwlock);
-        rtp_frame_list_insert(&pc->rtp_frame_send_list, frame);
+        if (rtp_frame_list_insert(&pc->rtp_frame_send_list, frame) < 0) {
+            rtp_frame_free(frame);
+        }
         rwlock_unlock(&pc->rtp_frame_send_rwlock);
     }
 }
@@ -183,7 +185,9 @@ static void *rtp_process_thread_entry(void *args)
             juice_send(pc->juice_agent, frame->packet, frame->bytes);
             frame->resend_count--;
             rwlock_wlock(&pc->rtp_frame_cache_rwlock);
-            rtp_frame_list_insert(&pc->rtp_frame_cache_list, frame);
+            if (rtp_frame_list_insert(&pc->rtp_frame_cache_list, frame) < 0) {
+                rtp_frame_free(frame);
+            }
             rwlock_unlock(&pc->rtp_frame_cache_rwlock);
         }
         HASH_ITER(hh, pc->rtp_frame_cache_list, frame, tmp) {

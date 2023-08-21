@@ -20,6 +20,8 @@
 #define uthash_malloc(sz) juice_malloc(sz)
 #define uthash_free(ptr, sz) juice_free(ptr)
 
+#define RTP_FRAME_LIST_MAX_SIZE 256
+
 typedef struct {
     int seq;                    /* key */
     char *packet;
@@ -32,7 +34,8 @@ typedef struct {
 rtp_frame_t *rtp_frame_malloc(int seq, const char *packet, int bytes);
 void rtp_frame_free(rtp_frame_t *frame);
 
-int rtp_frame_list_insert(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame);
+int rtp_frame_list_insert_ex(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame, int size);
+#define rtp_frame_list_insert(rtp_frame_list, frame) rtp_frame_list_insert_ex(rtp_frame_list, frame, RTP_FRAME_LIST_MAX_SIZE)
 void rtp_frame_list_pop(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame);
 rtp_frame_t *rtp_frame_list_find_by_seq(rtp_frame_t **rtp_frame_list, int seq_number);
 void rtp_frame_list_delete(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame);

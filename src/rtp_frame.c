@@ -43,11 +43,11 @@ void rtp_frame_free(rtp_frame_t *frame) {
     }
 }
 
-int rtp_frame_list_insert(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame) {
+int rtp_frame_list_insert_ex(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame, int size) {
     int ret = -1;
     rtp_frame_t *s;
 
-    if (frame) {
+    if (frame && (HASH_COUNT(*rtp_frame_list) <= size)) {
         int seq = frame->seq;
 
         HASH_FIND_INT(*rtp_frame_list, &seq, s);  /* seq already in the hash? */
@@ -59,6 +59,10 @@ int rtp_frame_list_insert(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame) {
     }
     return ret;
 }
+
+// int rtp_frame_list_insert(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame) {
+//     return rtp_frame_list_insert_ex(rtp_frame_list, frame, RTP_FRAME_LIST_MAX_SIZE);
+// }
 
 void rtp_frame_list_pop(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame) {
     if (frame) {
