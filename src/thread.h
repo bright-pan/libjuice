@@ -9,6 +9,12 @@
 #ifndef JUICE_THREAD_H
 #define JUICE_THREAD_H
 
+#if !defined(JUICE_CONFIG_FILE)
+#include "juice/juice_config.h"
+#else
+#include JUICE_CONFIG_FILE
+#endif
+
 #ifdef _WIN32
 
 #ifndef _WIN32_WINNT
@@ -76,6 +82,7 @@ static inline void thread_join_impl(thread_t t, thread_return_t *res) {
 #endif
 
 typedef pthread_mutex_t mutex_t;
+typedef pthread_attr_t thread_attr_t;
 typedef pthread_t thread_t;
 typedef void *thread_return_t;
 #define THREAD_CALL
@@ -85,21 +92,18 @@ typedef void *thread_return_t;
 #define MUTEX_PLAIN PTHREAD_MUTEX_NORMAL
 #define MUTEX_RECURSIVE PTHREAD_MUTEX_RECURSIVE
 
-static inline int mutex_init_impl(mutex_t *m, int flags) {
-	pthread_mutexattr_t mutexattr;
-	pthread_mutexattr_init(&mutexattr);
-	pthread_mutexattr_settype(&mutexattr, flags);
-	int ret = pthread_mutex_init(m, &mutexattr);
-	pthread_mutexattr_destroy(&mutexattr);
-	return ret;
-}
+int mutex_init_impl(mutex_t *m, int flags);
 
 #define mutex_init(m, flags) mutex_init_impl(m, flags)
 #define mutex_lock(m) pthread_mutex_lock(m)
 #define mutex_unlock(m) (void)pthread_mutex_unlock(m)
 #define mutex_destroy(m) (void)pthread_mutex_destroy(m)
 
+extern thread_attr_t thread_attr_default;
+void thread_attr_init(thread_attr_t *attr, int prio, int ssize);
+
 #define thread_init(t, func, arg) pthread_create(t, NULL, func, arg)
+#define thread_init_ex(t, attr, func, arg) pthread_create(t, attr, func, arg)
 #define thread_join(t, res) (void)pthread_join(t, res)
 
 #endif // ifdef _WIN32

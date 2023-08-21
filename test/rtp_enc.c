@@ -1,6 +1,5 @@
-#include <aos/kernel.h>
-#include "cvi_venc.h"
-#include "media_video.h"
+#include <cvi_venc.h>
+#include <media_video.h>
 // #include "blk_fifo.h"
 // #include "RTP_ENC.h"
 // #include "rtmp_proc.h"
@@ -11,6 +10,7 @@
 // #include <alsa/pcm.h>
 #include "rtp.h"
 #include "rtp_enc.h"
+#include "thread.h"
 
 
 #define RTP_ENC_INTERVAL 10 //ms
@@ -162,11 +162,14 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 
 int rtp_enc_loop_flag = 0;
 
-static void rtp_enc_entry(void *param) {
+static void *rtp_enc_thread_entry(void *param) {
     peer_connection_t *pc = param;
     VENC_STREAM_S venc_stream = {0};
     VENC_PACK_S *pPack = NULL;
     int iPackid = 0;
+
+    thread_set_name_self("rtp_enc");
+
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
         if (rtp_enc_loop_flag && pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
@@ -182,7 +185,7 @@ static void rtp_enc_entry(void *param) {
                     pPack = &venc_stream.pstPack[iPackid];
                     // peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
-                    aos_msleep(1);
+                    usleep(1000*5);
                     //send fifo
                     // while (1) {
                     //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
@@ -199,12 +202,32 @@ static void rtp_enc_entry(void *param) {
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             }
         }
-        aos_msleep(RTP_ENC_INTERVAL);
+        usleep(RTP_ENC_INTERVAL*1000);
     }
+    pthread_exit(&rtp_enc_loop_flag);
+    return NULL;
+}
+
+int rtp_enc_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
+    int ret = -1;
+    thread_attr_t attr;
+
+    if (pc->rtp_enc_thread == NULL) {
+        thread_attr_init(&attr, pc->rtp_enc_thread_prio, pc->rtp_enc_thread_ssize);
+        ret = thread_init_ex(&pc->rtp_enc_thread, &attr, thread_entry, pc);
+        if (ret != 0) {
+            JLOG_ERROR("rtp enc thread created failure!");
+        } else {
+            JLOG_INFO("rtp enc thread created!");
+        }
+    } else {
+        JLOG_ERROR("rtp enc thread has beed created!");
+    }
+    return ret;
 }
 
 void rtp_enc_init(peer_connection_t *pc) {
-    aos_task_new("rtp_enc", rtp_enc_entry, pc, 30*1024);
+    rtp_enc_thread_init(pc, rtp_enc_thread_entry);
 }
 
 void rtp_enc_start(peer_connection_t *pc) {
@@ -214,7 +237,7 @@ void rtp_enc_start(peer_connection_t *pc) {
 
 void rtp_enc_stop(peer_connection_t *pc) {
     rtp_enc_loop_flag = 0;
-    aos_msleep(1000);
+    usleep(1000*1000);
     peer_connection_reset_video_fifo(pc);
 }
 

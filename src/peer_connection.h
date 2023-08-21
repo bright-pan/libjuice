@@ -81,11 +81,25 @@ typedef struct peer_connect {
     packet_fifo_t data_fifo; //send data
 
     rtp_frame_t *rtp_frame_cache_list;
+    mutex_t rtp_frame_cache_mutex;
     rtp_frame_t *rtp_frame_send_list;
+    mutex_t rtp_frame_send_mutex;
     // Buffer *audio_rb[2];
     // Buffer *video_rb[2];
     // Buffer *data_rb[2];
-    void (*loop)(void *param);
+
+    thread_t loop_thread; // thread handle
+    int loop_thread_ssize; // stack size
+    int loop_thread_prio; // sche proirity
+    
+
+    thread_t rtp_process_thread; // thread handle
+    int rtp_process_thread_ssize; // stack size
+    int rtp_process_thread_prio; // sche proirity
+
+    thread_t rtp_enc_thread; // thread handle
+    int rtp_enc_thread_ssize; // stack size
+    int rtp_enc_thread_prio; // sche proirity
 
     rtp_packetizer_t audio_packetizer;
     rtp_packetizer_t video_packetizer;

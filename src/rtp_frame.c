@@ -37,26 +37,33 @@ rtp_frame_t *rtp_frame_malloc(int seq, const char *packet, int bytes) {
 }
 
 void rtp_frame_free(rtp_frame_t *frame) {
-    uthash_free(frame->packet, 0);
-    uthash_free(frame, 0);
+    if (frame) {
+        uthash_free(frame->packet, 0);
+        uthash_free(frame, 0);
+    }
 }
 
 int rtp_frame_list_insert(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame) {
     int ret = -1;
     rtp_frame_t *s;
-    int seq = frame->seq;
 
-    HASH_FIND_INT(*rtp_frame_list, &seq, s);  /* seq already in the hash? */
-    if (s == NULL) {
-        s = frame;
-        HASH_ADD_INT(*rtp_frame_list, seq, s);  /* seq is the key field */
-        ret = 0;
+    if (frame) {
+        int seq = frame->seq;
+
+        HASH_FIND_INT(*rtp_frame_list, &seq, s);  /* seq already in the hash? */
+        if (s == NULL) {
+            s = frame;
+            HASH_ADD_INT(*rtp_frame_list, seq, s);  /* seq is the key field */
+            ret = 0;
+        }
     }
     return ret;
 }
 
 void rtp_frame_list_pop(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame) {
-    HASH_DEL(*rtp_frame_list, frame);  /* frame: pointer to delete */
+    if (frame) {
+        HASH_DEL(*rtp_frame_list, frame);  /* frame: pointer to delete */
+    }
 }
 
 rtp_frame_t *rtp_frame_list_find_by_seq(rtp_frame_t **rtp_frame_list, int seq) {
@@ -67,8 +74,10 @@ rtp_frame_t *rtp_frame_list_find_by_seq(rtp_frame_t **rtp_frame_list, int seq) {
 }
 
 void rtp_frame_list_delete(rtp_frame_t **rtp_frame_list, rtp_frame_t *frame) {
-    HASH_DEL(*rtp_frame_list, frame);  /* frame: pointer to delete */
-    rtp_frame_free(frame);
+    if (frame) {
+        HASH_DEL(*rtp_frame_list, frame);  /* frame: pointer to delete */
+        rtp_frame_free(frame);
+    }
 }
 
 void rtp_frame_list_delete_all(rtp_frame_t **rtp_frame_list) {
@@ -109,14 +118,18 @@ void rtp_frame_list_sort_by_seq(rtp_frame_t **rtp_frame_list) {
 }
 
 static void rtp_frame_print(rtp_frame_t *frame) {
-    JLOG_INFO("----------------------------");
-    JLOG_INFO_DUMP_HEX(frame->packet, frame->bytes, "seq %d: %d Bytes", frame->seq, frame->bytes);
+    if (frame) {
+        JLOG_INFO("----------------------------");
+        JLOG_INFO_DUMP_HEX(frame->packet, frame->bytes, "seq %d: %d Bytes", frame->seq, frame->bytes);
+    }
 }
 
 void rtp_frame_list_print_by_seq(rtp_frame_t **rtp_frame_list, int seq) {
     rtp_frame_t *frame;
     frame = rtp_frame_list_find_by_seq(rtp_frame_list, seq);
-    rtp_frame_print(frame);
+    if (frame) {
+        rtp_frame_print(frame);
+    }
 }
 
 void rtp_frame_list_print_all(rtp_frame_t **rtp_frame_list) {

@@ -30,7 +30,7 @@
 #define MQTT_CLIENT_BUF_SIZE SDP_CONTENT_LENGTH
 
 #define MQTT_URI                "tcp://broker.emqx.io:1883"
-// #define MQTT_URI                "tcp://mqtt.eclipseprojects.io:1883"
+// #define MQTT_URI                "tcp://192.168.12.193:1883"
 #define MQTT_SUBTOPIC           "/webrtc/mqttjs_bd853a81"
 #define MQTT_PUBTOPIC           "/webrtc/mqttjs_3f770906"
 #define MQTT_WILLMSG            "Goodbye!"
@@ -61,10 +61,23 @@
 #define juice_assert(ptr)        aos_assert(ptr)
 
 
-#define RTP_FRAME_INTERVAL 1 //1000/30)
+#define RTP_FRAME_INTERVAL 5 //1000/30)
 #define RTP_FRAME_TIMEOUT 1500
 #define RTP_FRAME_TIMEOUT_COUNT (RTP_FRAME_TIMEOUT / RTP_FRAME_INTERVAL)
 #define RTP_FRAME_RESEND_COUNT 3
 
+// posix thread
+#if defined(__linux__) || defined(AOS_COMP_POSIX)
+
+#include <pthread.h>
+#define THREAD_DEFAULT_STACK_SIZE       (40 * 1024)
+#define THREAD_DEFAULT_PRIORITY         30
+#define THREAD_DEFAULT_SLICE            10
+#define THREAD_CREATE_JOINABLE          PTHREAD_CREATE_JOINABLE
+#define THREAD_SCOPE_SYSTEM             PTHREAD_SCOPE_SYSTEM
+#define THREAD_EXPLICIT_SCHED           PTHREAD_EXPLICIT_SCHED
+#define THREAD_DEFAULT_GUARD_SIZE       256
+#define THREAD_DYN_INIT                 PTHREAD_DYN_INIT
+#endif
 
 #endif

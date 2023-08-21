@@ -80,6 +80,7 @@ source_file:
   - "src/sctp.c"
   - "src/paho_mqtt_udp.c"
   - "src/rtp_frame.c"
+  - "src/thread.c"
   - "test/*.c"
 
 ## 第五部分：配置信息
