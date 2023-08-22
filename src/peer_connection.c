@@ -24,9 +24,9 @@ static juice_turn_server_t turn_server;
 
 int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
     int ret = -1;
-    rwlock_rlock(&pc->rtp_frame_cache_rwlock);
+
+    rwlock_wlock(&pc->rtp_frame_cache_rwlock);
     rtp_frame_t *frame = rtp_frame_list_find_by_seq(&pc->rtp_frame_cache_list, pid);
-    rwlock_unlock(&pc->rtp_frame_cache_rwlock);
     if (frame) {
         JLOG_INFO("resend pid[%d]:%d", pid, frame->bytes);
         // frame->timeout_count--;
@@ -36,11 +36,10 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
         }
         // resend
         if (frame->resend_count-- < 0) {
-            rwlock_wlock(&pc->rtp_frame_cache_rwlock);
             rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
-            rwlock_unlock(&pc->rtp_frame_cache_rwlock);
         }
     }
+    rwlock_unlock(&pc->rtp_frame_cache_rwlock);
     return ret;
 }
 
@@ -179,11 +178,14 @@ static void *rtp_process_thread_entry(void *args)
     while (1) {
         HASH_ITER(hh, pc->rtp_frame_send_list, frame, tmp) {
             //rtp_frame_print(frame);
+            // rtp frame send process
             rwlock_wlock(&pc->rtp_frame_send_rwlock);
             rtp_frame_list_pop(&pc->rtp_frame_send_list, frame);
-            rwlock_unlock(&pc->rtp_frame_send_rwlock);
+            // send data
             juice_send(pc->juice_agent, frame->packet, frame->bytes);
             frame->resend_count--;
+            rwlock_unlock(&pc->rtp_frame_send_rwlock);
+            // insert to cache;
             rwlock_wlock(&pc->rtp_frame_cache_rwlock);
             if (rtp_frame_list_insert(&pc->rtp_frame_cache_list, frame) < 0) {
                 rtp_frame_free(frame);
@@ -191,11 +193,11 @@ static void *rtp_process_thread_entry(void *args)
             rwlock_unlock(&pc->rtp_frame_cache_rwlock);
         }
         HASH_ITER(hh, pc->rtp_frame_cache_list, frame, tmp) {
+            rwlock_wlock(&pc->rtp_frame_cache_rwlock);
             if (frame->timeout_count-- <= 0) {
-                rwlock_wlock(&pc->rtp_frame_cache_rwlock);
                 rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
-                rwlock_unlock(&pc->rtp_frame_cache_rwlock);
             }
+            rwlock_unlock(&pc->rtp_frame_cache_rwlock);
         }
         usleep(RTP_FRAME_INTERVAL*1000);
     }

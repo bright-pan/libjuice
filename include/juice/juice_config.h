@@ -30,6 +30,7 @@
 #define MQTT_CLIENT_BUF_SIZE SDP_CONTENT_LENGTH
 
 #define MQTT_URI                "tcp://broker.emqx.io:1883"
+// #define MQTT_URI                "tcp://mqtt.eclipseprojects.io:1883"
 // #define MQTT_URI                "tcp://192.168.12.193:1883"
 #define MQTT_SUBTOPIC           "/webrtc/mqttjs_bd853a81"
 #define MQTT_PUBTOPIC           "/webrtc/mqttjs_3f770906"
