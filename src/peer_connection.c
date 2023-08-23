@@ -156,14 +156,14 @@ static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *use
     peer_connection_t *pc = user_data;
     dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
     // JLOG_INFO("add rtp frame[%d]", seq_number);
+    rwlock_wlock(&pc->rtp_frame_send_rwlock);
     rtp_frame_t *frame = rtp_frame_malloc(ntohs(((rtp_header_t *)packet)->seq_number), packet, bytes);
     if (frame) {
-        rwlock_wlock(&pc->rtp_frame_send_rwlock);
         if (rtp_frame_list_insert(&pc->rtp_frame_send_list, frame) < 0) {
             rtp_frame_free(frame);
         }
-        rwlock_unlock(&pc->rtp_frame_send_rwlock);
     }
+    rwlock_unlock(&pc->rtp_frame_send_rwlock);
 }
 
 static void *rtp_process_thread_entry(void *args)
