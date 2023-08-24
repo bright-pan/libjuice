@@ -109,7 +109,7 @@ int mutex_init_impl(mutex_t *m, int flags);
 extern thread_attr_t thread_attr_default;
 void thread_attr_init(thread_attr_t *attr, int prio, int ssize);
 
-#define thread_init(t, func, arg) pthread_create(t, NULL, func, arg)
+#define thread_init(t, func, arg) pthread_create(t, &thread_attr_default, func, arg)
 #define thread_init_ex(t, attr, func, arg) pthread_create(t, attr, func, arg)
 #define thread_join(t, res) (void)pthread_join(t, res)
 

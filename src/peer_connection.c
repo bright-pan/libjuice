@@ -25,8 +25,8 @@ static juice_turn_server_t turn_server;
 int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
     int ret = -1;
 
-    rwlock_wlock(&pc->rtp_frame_cache_rwlock);
-    rtp_frame_t *frame = rtp_frame_list_find_by_seq(&pc->rtp_frame_cache_list, pid);
+    rtp_list_wlock(&pc->rtp_cache_list);
+    rtp_frame_t *frame = rtp_list_find_by_seq(&pc->rtp_cache_list, pid);
     if (frame) {
         JLOG_INFO("resend pid[%d]:%d", pid, frame->bytes);
         // frame->timeout_count--;
@@ -36,10 +36,10 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
         }
         // resend
         if (frame->resend_count-- < 0) {
-            rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
+            rtp_list_delete(&pc->rtp_cache_list, frame);
         }
     }
-    rwlock_unlock(&pc->rtp_frame_cache_rwlock);
+    rtp_list_unlock(&pc->rtp_cache_list);
     return ret;
 }
 
@@ -156,14 +156,14 @@ static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *use
     peer_connection_t *pc = user_data;
     dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
     // JLOG_INFO("add rtp frame[%d]", seq_number);
-    rwlock_wlock(&pc->rtp_frame_send_rwlock);
     rtp_frame_t *frame = rtp_frame_malloc(ntohs(((rtp_header_t *)packet)->seq_number), packet, bytes);
     if (frame) {
-        if (rtp_frame_list_insert(&pc->rtp_frame_send_list, frame) < 0) {
+        rtp_list_wlock(&pc->rtp_send_list);
+        if (rtp_list_insert(&pc->rtp_send_list, frame) < 0) {
             rtp_frame_free(frame);
         }
+        rtp_list_unlock(&pc->rtp_send_list);
     }
-    rwlock_unlock(&pc->rtp_frame_send_rwlock);
 }
 
 static void *rtp_process_thread_entry(void *args)
@@ -176,29 +176,27 @@ static void *rtp_process_thread_entry(void *args)
     thread_set_name_self("rtp_process");
 
     while (1) {
-        HASH_ITER(hh, pc->rtp_frame_send_list, frame, tmp) {
-            //rtp_frame_print(frame);
-            // rtp frame send process
-            rwlock_wlock(&pc->rtp_frame_send_rwlock);
-            rtp_frame_list_pop(&pc->rtp_frame_send_list, frame);
+        rtp_list_wlock(&pc->rtp_send_list);
+        HASH_ITER(hh, pc->rtp_send_list.utlist, frame, tmp) {
             // send data
             juice_send(pc->juice_agent, frame->packet, frame->bytes);
             frame->resend_count--;
-            rwlock_unlock(&pc->rtp_frame_send_rwlock);
+            rtp_list_pop(&pc->rtp_send_list, frame);
             // insert to cache;
-            rwlock_wlock(&pc->rtp_frame_cache_rwlock);
-            if (rtp_frame_list_insert(&pc->rtp_frame_cache_list, frame) < 0) {
+            rtp_list_wlock(&pc->rtp_cache_list);
+            if (rtp_list_insert(&pc->rtp_cache_list, frame) < 0) {
                 rtp_frame_free(frame);
             }
-            rwlock_unlock(&pc->rtp_frame_cache_rwlock);
+            rtp_list_unlock(&pc->rtp_cache_list);
         }
-        HASH_ITER(hh, pc->rtp_frame_cache_list, frame, tmp) {
-            rwlock_wlock(&pc->rtp_frame_cache_rwlock);
+        rtp_list_unlock(&pc->rtp_send_list);
+        rtp_list_wlock(&pc->rtp_cache_list);
+        HASH_ITER(hh, pc->rtp_cache_list.utlist, frame, tmp) {
             if (frame->timeout_count-- <= 0) {
-                rtp_frame_list_delete(&pc->rtp_frame_cache_list, frame);
+                rtp_list_delete(&pc->rtp_cache_list, frame);
             }
-            rwlock_unlock(&pc->rtp_frame_cache_rwlock);
         }
+        rtp_list_unlock(&pc->rtp_cache_list);
         usleep(RTP_FRAME_INTERVAL*1000);
     }
     pthread_exit(&ret);
@@ -317,14 +315,20 @@ static void agent_on_state_changed(juice_agent_t *agent, juice_state_t state, vo
     peer_connection_t *pc = user_ptr;
     JLOG_INFO("%s state: %s\n", pc->name, juice_state_to_string(state));
 
-    if (state == JUICE_STATE_CONNECTED) {
-        // Agent 1: on connected, send a message
-        // char message[64];
-        // memset(message, '\0', 64);
-        // snprintf(message, 64, "hello from %s", pc->name);
-        // juice_send(agent, message, strlen(message));
-        //agent_change_state(pc->juice_agent, JUICE_STATE_HANDSHAKE);
-        STATE_CHANGED(pc, PEER_CONNECTION_CONNECTING);
+    switch (state) {
+        case JUICE_STATE_CONNECTED: {
+            STATE_CHANGED(pc, PEER_CONNECTION_CONNECTING);
+            break;
+        }
+        case JUICE_STATE_FAILED: {
+            STATE_CHANGED(pc, PEER_CONNECTION_FAILED);
+            pc->dtls_srtp.state = DTLS_SRTP_STATE_INIT;
+            break;
+        }
+        default :{
+            JLOG_ERROR("%s state: %s is not process\n", pc->name, juice_state_to_string(state));
+            break;
+        }
     }
 }
 
@@ -448,7 +452,6 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->rtp_enc_thread_prio = 31;
 }
 
-
 static int peer_connection_loop_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
     int ret = -1;
     thread_attr_t attr;
@@ -468,6 +471,7 @@ static int peer_connection_loop_thread_init(peer_connection_t *pc, void *(*threa
 }
 
 extern void mqtt_answer_publish(char *sdp_content);
+
 
 static void peer_connection_state_start(peer_connection_t *pc) {
 
@@ -538,10 +542,8 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     packet_fifo_reset(&pc->other_fifo);
     packet_fifo_reset(&pc->rtp_fifo);
 
-    pc->rtp_frame_cache_list = NULL;
-    rwlock_init(&pc->rtp_frame_cache_rwlock);
-    pc->rtp_frame_send_list = NULL;
-    rwlock_init(&pc->rtp_frame_send_rwlock);
+    rtp_list_init(&pc->rtp_send_list);
+    rtp_list_init(&pc->rtp_cache_list);
 
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }
@@ -801,7 +803,7 @@ void peer_connection_send_rtp_packet(peer_connection_t *pc, char *packet, int by
     rtp_header_t *rtp_header = (rtp_header_t *)packet;
     int seq_number = ntohs(rtp_header->seq_number);
     // JLOG_INFO("add rtp frame[%d]", seq_number);
-    rtp_frame_add(&pc->rtp_frame_cache_list, seq_number, packet, bytes);
+    rtp_frame_add(&pc->rtp_cache_list, seq_number, packet, bytes);
     // int ret = juice_send(pc->juice_agent, packet, bytes);
     // if (ret == JUICE_ERR_SUCCESS) {
     //     return bytes;

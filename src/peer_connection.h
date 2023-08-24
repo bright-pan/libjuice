@@ -18,7 +18,7 @@ extern "C" {
 #include "codec.h"
 // #include "config.h"
 #include "rtp.h"
-#include "rtp_frame.h"
+#include "rtp_list.h"
 // #include "rtcp_packet.h"
 
 
@@ -80,13 +80,8 @@ typedef struct peer_connect {
     packet_fifo_t video_fifo; //send video
     packet_fifo_t data_fifo; //send data
 
-    rtp_frame_t *rtp_frame_cache_list;
-    rwlock_t rtp_frame_cache_rwlock;
-    rtp_frame_t *rtp_frame_send_list;
-    rwlock_t rtp_frame_send_rwlock;
-    // Buffer *audio_rb[2];
-    // Buffer *video_rb[2];
-    // Buffer *data_rb[2];
+    rtp_list_t rtp_cache_list;
+    rtp_list_t rtp_send_list;
 
     thread_t loop_thread; // thread handle
     int loop_thread_ssize; // stack size

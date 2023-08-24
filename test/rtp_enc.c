@@ -1,5 +1,6 @@
 #include <cvi_venc.h>
 #include <media_video.h>
+#include <lango_default_define.h>
 // #include "blk_fifo.h"
 // #include "RTP_ENC.h"
 // #include "rtmp_proc.h"
@@ -169,10 +170,11 @@ static void *rtp_enc_thread_entry(void *param) {
     int iPackid = 0;
 
     thread_set_name_self("rtp_enc");
+    LG_media_video_init(PARAM_RGB_PIPELINE);
 
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
-        if (rtp_enc_loop_flag && pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
+        if (rtp_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             // JLOG_INFO("venc get stream------------------");
             if(MEDIA_VIDEO_VencGetStream(0, &venc_stream, 2000) == CVI_SUCCESS) {
                 //parse sps pps
@@ -185,7 +187,7 @@ static void *rtp_enc_thread_entry(void *param) {
                     pPack = &venc_stream.pstPack[iPackid];
                     // peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
-                    usleep(1000*5);
+                    usleep(1000*RTP_FRAME_INTERVAL);
                     //send fifo
                     // while (1) {
                     //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
