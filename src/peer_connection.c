@@ -45,13 +45,13 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
 
 void peer_connection_rtp_frame_lost_process(peer_connection_t *pc, int pid, uint16_t lostmap) {
 
-    peer_connection_send_rtp_frame(pc, pid);
+    peer_connection_send_rtp_frame(pc, pid++);
 
     if (lostmap) {
         for (int i = 0; i < 16; i++) {
-            pid++;
             if (lostmap & bits_mask(i)) {
-                peer_connection_send_rtp_frame(pc, pid);
+                // pid_array[i+1] = pid++;
+                peer_connection_send_rtp_frame(pc, pid + i);
             }
         }
     }
@@ -62,92 +62,92 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
     rtcp_header_t rtcp_header = {0};
     size_t rtcp_len,offset = 0;
     uint8_t *rtcp_buf;
-    if (len > sizeof(rtcp_header_t)) {
-        while(offset < len) {
-                rtcp_buf = buf + offset;
-                memcpy(&rtcp_header, rtcp_buf, sizeof(rtcp_header_t));
-                rtcp_len = (ntohs(rtcp_header.length) + 1) * 4;
-                // JLOG_INFO("parse rtcp[%d]:", rtcp_len);
-                // JLOG_INFO_DUMP_HEX(rtcp_buf, rtcp_len);
-                if (offset + rtcp_len <= len) {
-                    switch(rtcp_header.type) {
-                        case RTCP_RR: {
-                            if(rtcp_header.rc > 0) {
-                                rtcp_rr_t rtcp_rr = rtcp_packet_parse_rr(rtcp_buf);
-                                uint32_t fraction = ntohl(rtcp_rr.report_block[0].flcnpl) >> 24;
-                                uint32_t total = ntohl(rtcp_rr.report_block[0].flcnpl) & 0x00FFFFFF;
-                                if(pc->cb_receiver_packet_loss && fraction > 0) {
-                                    pc->cb_receiver_packet_loss((float)fraction/256.0, total, pc);
-                                }
-                            }
-                            break;
-                        }
-                        case RTCP_RTPFB: {
-                            switch (rtcp_header.rc) {
-                                case RTCP_FMT_RTPFB_NACK: {
-                                    rtcp_rtpfb_nack_t rtpfb_nack = rtcp_packet_parse_rtpfb_nack(rtcp_buf);
-                                    uint32_t ssrc_ps = ntohl(rtpfb_nack.nack_block[0].ssrc_ps);
-                                    uint32_t ssrc_ms = ntohl(rtpfb_nack.nack_block[0].ssrc_ms);
-                                    uint16_t pid = ntohs(rtpfb_nack.nack_block[0].pid);
-                                    uint16_t lostmap = ntohs(rtpfb_nack.nack_block[0].lostmap);
-                                    // JLOG_INFO("pid:%d, lostmap:%04X, ssrc_ps:%d, ssrc_ms:%d", pid, lostmap, ssrc_ps, ssrc_ms);
-                                    peer_connection_rtp_frame_lost_process(pc, pid, lostmap);
-                                    break;
-                                }
-                                default: {
-                                    JLOG_ERROR("unknow rtpfb fmt[%d] for parse", rtcp_header.type);
-                                    break;
-                                }
-                            }
-                            break;
-                        }
-                        case RTCP_PSFB: {
-                            switch (rtcp_header.rc) {
-                                case RTCP_FMT_PSFB_PLI: {
-                                    rtcp_psfb_pli_t psfb_pli = rtcp_packet_parse_psfb_pli(rtcp_buf);
-                                    uint32_t ssrc_ps = ntohl(psfb_pli.pli_block[0].ssrc_ps);
-                                    uint32_t ssrc_ms = ntohl(psfb_pli.pli_block[0].ssrc_ms);
-                                    JLOG_INFO("ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
-                                    break;
-                                }
-                                case RTCP_FMT_PSFB_REMB: {
-                                    rtcp_psfb_remb_t psfb_remb = rtcp_packet_parse_psfb_remb(rtcp_buf);
-                                    uint32_t ssrc_ps = ntohl(psfb_remb.remb_block[0].ssrc_ps);
-                                    uint32_t ssrc_ms = ntohl(psfb_remb.remb_block[0].ssrc_ms);
-                                    uint32_t remb = ntohl(psfb_remb.remb_block[0].remb);
-                                    uint32_t ssrc_feedback = ntohl(psfb_remb.remb_block[0].ssrc_feedback);
-                                    br_union_t br;
-                                    br.value = ntohl(psfb_remb.remb_block[0].br.value);
-                                    uint32_t num_ssrc = psfb_remb.remb_block[0].br.s.num_ssrc;
-                                    uint32_t exp = psfb_remb.remb_block[0].br.s.exp;
-                                    uint32_t mantissa = psfb_remb.remb_block[0].br.s.mantissa;
-                                    // uint32_t num_ssrc = psfb_remb.remb_block[0].num_ssrc;
-                                    // uint32_t exp = psfb_remb.remb_block[0].exp;
-                                    // uint32_t mantissa = psfb_remb.remb_block[0].mantissa;
-                                    JLOG_DEBUG("ssrc_ps:%d, ssrc_ms:%d, remb:%08X, num_ssrc:%d, br: %fkBps, ssrc_feedback:%d",
-                                               ssrc_ps, ssrc_ms, remb, num_ssrc, pow(2, exp) * mantissa / 1000, ssrc_feedback);
 
-                                    break;
-                                }
-                                default: {
-                                    JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "-----------unknow psfb fmt[%d] for parse, rtcp_buf[%d]------------", rtcp_header.type, rtcp_len);
-                                    break;
-                                }
+    while(offset + sizeof(rtcp_header_t) <= len) {
+        rtcp_buf = buf + offset;
+        memcpy(&rtcp_header, rtcp_buf, sizeof(rtcp_header_t));
+        rtcp_len = (ntohs(rtcp_header.length) + 1) * 4;
+        // JLOG_INFO("parse rtcp[%d]:", rtcp_len);
+        // JLOG_INFO_DUMP_HEX(rtcp_buf, rtcp_len, "rtcp_type:%d", rtcp_header.type);
+        if (offset + rtcp_len <= len) {
+            switch(rtcp_header.type) {
+                case RTCP_RR: {
+                    if(rtcp_header.rc > 0) {
+                        rtcp_rr_t rtcp_rr = rtcp_packet_parse_rr(rtcp_buf);
+                        uint32_t fraction = ntohl(rtcp_rr.report_block[0].flcnpl) >> 24;
+                        uint32_t total = ntohl(rtcp_rr.report_block[0].flcnpl) & 0x00FFFFFF;
+                        if(pc->cb_receiver_packet_loss && fraction > 0) {
+                            pc->cb_receiver_packet_loss((float)fraction/256.0, total, pc);
+                        }
+                    }
+                    break;
+                }
+                case RTCP_RTPFB: {
+                    switch (rtcp_header.rc) {
+                        case RTCP_FMT_RTPFB_NACK: {
+                            rtcp_rtpfb_nack_t rtpfb_nack = rtcp_packet_parse_rtpfb_nack(rtcp_buf);
+                            uint16_t nack_block_size = ntohs(rtpfb_nack.header.length) - 2;
+                            uint32_t ssrc_ps = ntohl(rtpfb_nack.ssrc_ps);
+                            uint32_t ssrc_ms = ntohl(rtpfb_nack.ssrc_ms);
+                            for (int i = 0; i < nack_block_size; i++) {
+                                uint16_t pid = ntohs(rtpfb_nack.nack_block[0].pid);
+                                uint16_t lostmap = ntohs(rtpfb_nack.nack_block[0].lostmap);
+                                // JLOG_INFO("pid:%d, lostmap:%04X, ssrc_ps:%d, ssrc_ms:%d", pid, lostmap, ssrc_ps, ssrc_ms);
+                                peer_connection_rtp_frame_lost_process(pc, pid, lostmap);
                             }
                             break;
                         }
                         default: {
-                            JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "--------------unknow rtcp type[%d] parse, rtcp_buf[%d]-----------", rtcp_header.type);
+                            JLOG_ERROR("unknow rtpfb fmt[%d] for parse", rtcp_header.type);
                             break;
                         }
                     }
-                    offset += rtcp_len;
-                } else {
+                    break;
+                }
+                case RTCP_PSFB: {
+                    switch (rtcp_header.rc) {
+                        case RTCP_FMT_PSFB_PLI: {
+                            rtcp_psfb_pli_t psfb_pli = rtcp_packet_parse_psfb_pli(rtcp_buf);
+                            uint32_t ssrc_ps = ntohl(psfb_pli.pli_block[0].ssrc_ps);
+                            uint32_t ssrc_ms = ntohl(psfb_pli.pli_block[0].ssrc_ms);
+                            JLOG_INFO("ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
+                            break;
+                        }
+                        case RTCP_FMT_PSFB_REMB: {
+                            rtcp_psfb_remb_t psfb_remb = rtcp_packet_parse_psfb_remb(rtcp_buf);
+                            uint32_t ssrc_ps = ntohl(psfb_remb.remb_block[0].ssrc_ps);
+                            uint32_t ssrc_ms = ntohl(psfb_remb.remb_block[0].ssrc_ms);
+                            uint32_t remb = ntohl(psfb_remb.remb_block[0].remb);
+                            uint32_t ssrc_feedback = ntohl(psfb_remb.remb_block[0].ssrc_feedback);
+                            br_union_t br;
+                            br.value = ntohl(psfb_remb.remb_block[0].br.value);
+                            uint32_t num_ssrc = psfb_remb.remb_block[0].br.s.num_ssrc;
+                            uint32_t exp = psfb_remb.remb_block[0].br.s.exp;
+                            uint32_t mantissa = psfb_remb.remb_block[0].br.s.mantissa;
+                            // uint32_t num_ssrc = psfb_remb.remb_block[0].num_ssrc;
+                            // uint32_t exp = psfb_remb.remb_block[0].exp;
+                            // uint32_t mantissa = psfb_remb.remb_block[0].mantissa;
+                            JLOG_DEBUG("ssrc_ps:%d, ssrc_ms:%d, remb:%08X, num_ssrc:%d, br: %fkBps, ssrc_feedback:%d",
+                                        ssrc_ps, ssrc_ms, remb, num_ssrc, pow(2, exp) * mantissa / 1000, ssrc_feedback);
+
+                            break;
+                        }
+                        default: {
+                            JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "-----------unknow psfb fmt[%d] for parse, rtcp_buf[%d]------------", rtcp_header.type, rtcp_len);
+                            break;
+                        }
+                    }
+                    break;
+                }
+                default: {
+                    JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "--------------unknow rtcp type[%d] parse, rtcp_buf[%d]-----------", rtcp_header.type);
                     break;
                 }
             }
-    } else {
-        JLOG_ERROR("parse error[%d]", len);
+            offset += rtcp_len;
+        } else {
+            break;
+        }
     }
 }
 

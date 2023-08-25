@@ -25,6 +25,8 @@ RTCP_REMB_FMT(15): 带宽估计, type-206
 ————————————————
 */
 
+#define RTCP_RTPFB_NACK_BLOCK_SIZE 10
+
 typedef enum {
 
     RTCP_FIR = 192,
@@ -79,18 +81,16 @@ typedef struct {
 } rtcp_report_block_t;
 
 typedef struct {
-
-    uint32_t ssrc_ps;// packet sender
-    uint32_t ssrc_ms;// media source
     uint16_t pid; // packet identifier
     uint16_t lostmap; // bitmap of lost packets
-
 } rtcp_rtpfb_nack_block_t;
 
 typedef struct {
 
     rtcp_header_t header;
-    rtcp_rtpfb_nack_block_t nack_block[1];
+    uint32_t ssrc_ps;// packet sender
+    uint32_t ssrc_ms;// media source
+    rtcp_rtpfb_nack_block_t nack_block[RTCP_RTPFB_NACK_BLOCK_SIZE];
 
 } rtcp_rtpfb_nack_t;
 
