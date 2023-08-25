@@ -86,7 +86,8 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                     switch (rtcp_header.rc) {
                         case RTCP_FMT_RTPFB_NACK: {
                             rtcp_rtpfb_nack_t rtpfb_nack = rtcp_packet_parse_rtpfb_nack(rtcp_buf);
-                            uint16_t nack_block_size = ntohs(rtpfb_nack.header.length) - 2;
+                            uint32_t nack_block_size = ntohs(rtpfb_nack.header.length) - 2;
+                            nack_block_size = nack_block_size > RTCP_RTPFB_NACK_BLOCK_SIZE ? RTCP_RTPFB_NACK_BLOCK_SIZE : nack_block_size; // limit block size;
                             uint32_t ssrc_ps = ntohl(rtpfb_nack.ssrc_ps);
                             uint32_t ssrc_ms = ntohl(rtpfb_nack.ssrc_ms);
                             for (int i = 0; i < nack_block_size; i++) {
