@@ -193,7 +193,7 @@
                 // New spec states offerToReceiveAudio/Video are of type long (due to
                 // having to tell how many "m" lines to generate).
                 // http://w3c.github.io/webrtc-pc/#idl-def-RTCOfferAnswerOptions.
-                // offerToReceiveAudio: 1,
+                offerToReceiveAudio: 1,
                 offerToReceiveVideo: 1,
                 // iceRestart: restartInput.checked,
                 // voiceActivityDetection: vadInput.checked
@@ -296,6 +296,7 @@
                 sendChannel.onclose = onSendChannelStateChange;
                 const offer = await pc.createOffer(offerOptions);
                 // const offer = await pc.createOffer();
+                console.log({ type: 'offer', sdp: offer.sdp })
                 remote_PostMessage({ type: 'offer', sdp: offer.sdp });
                 await pc.setLocalDescription(offer);
             };
@@ -337,20 +338,21 @@
                     }
                     remote_PostMessage(message);
                 };
+
                 // pc.ontrack = handleRemoteVideo;
-                // pc.ontrack = (e) => {
-                //     console.log('ontrack remote');
-                //     remotevideo.srcObject = e.streams[0];
-                //     remotevideo.play();
-                //     // hangupButton.disabled = false;
-                //     // return false;
-                // };
-                pc.addEventListener('track', async (event) => {
+                pc.ontrack = (e) => {
                     console.log('ontrack remote');
-                    const [remoteStream] = event.streams;
-                    remotevideo.srcObject = remoteStream;
-                    remotevideo.play()
-                });
+                    remotevideo.srcObject = e.streams[0];
+                    remotevideo.play();
+                    // hangupButton.disabled = false;
+                    // return false;
+                };
+                // pc.addEventListener('track', async (event) => {
+                //     console.log('ontrack remote');
+                //     const [remoteStream] = event.streams;
+                // //     remotevideo.srcObject = e.streams[0];
+                //     remotevideo.play()
+                // });
             }
 
             async function handleOffer(offer) {

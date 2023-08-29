@@ -57,6 +57,8 @@ typedef ULONG nfds_t;
 #define SENETRESET WSAENETRESET
 #define SEMSGSIZE WSAEMSGSIZE
 
+#define sock_strerr(errno)
+
 #else // assume POSIX
 
 #include <arpa/inet.h>
@@ -116,6 +118,8 @@ typedef int sockopt_t;
 #define SECONNRESET ECONNRESET
 #define SENETRESET ENETRESET
 #define SEMSGSIZE EMSGSIZE
+
+#define sock_strerr(errno) lwip_strerr(errno)
 
 #endif // _WIN32
 

@@ -127,7 +127,7 @@ int conn_thread_recv(socket_t sock, char *buffer, size_t size, addr_record_t *sr
 			JLOG_VERBOSE("No more datagrams to receive");
 			return 0;
 		}
-		JLOG_ERROR("recvfrom failed, errno=%d", sockerrno);
+		JLOG_ERROR("recvfrom failed, errno=%d, %s", sockerrno, sock_strerr(sockerrno));
 		return -1;
 	}
 
@@ -151,7 +151,7 @@ int conn_thread_run(juice_agent_t *agent) {
 				JLOG_VERBOSE("poll interrupted");
 				continue;
 			} else {
-				JLOG_FATAL("poll failed, errno=%d", sockerrno);
+				JLOG_FATAL("poll failed, errno=%d, %s", sockerrno, sock_strerr(sockerrno));
 				break;
 			}
 		}
@@ -239,7 +239,7 @@ int conn_thread_interrupt(juice_agent_t *agent) {
 	mutex_lock(&conn_impl->send_mutex);
 	if (udp_sendto_self(conn_impl->sock, NULL, 0) < 0) {
 		if (sockerrno != SEAGAIN && sockerrno != SEWOULDBLOCK) {
-			JLOG_WARN("Failed to interrupt poll by triggering socket, errno=%d", sockerrno);
+			JLOG_WARN("Failed to interrupt poll by triggering socket, errno=%d, %s", sockerrno, sock_strerr(sockerrno));
 		}
 		mutex_unlock(&conn_impl->send_mutex);
 		return -1;
@@ -272,7 +272,7 @@ int conn_thread_send(juice_agent_t *agent, const addr_record_t *dst, const char 
 		else if (sockerrno == SEMSGSIZE)
 			JLOG_WARN("Send failed, datagram is too large");
 		else
-			JLOG_WARN("Send failed, errno=%d", sockerrno);
+			JLOG_WARN("Send failed, errno=%d, %s", sockerrno, sock_strerr(sockerrno));
 	}
 
 	mutex_unlock(&conn_impl->send_mutex);

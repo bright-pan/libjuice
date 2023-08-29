@@ -210,7 +210,7 @@ static int rtp_packetizer_encode_h264(rtp_packetizer_t *rtp_packetizer, uint8_t 
 }
 
 static int rtp_packetizer_encode_generic(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
-
+    int ret = -1;
     rtp_header_t *rtp_header = (rtp_header_t*)rtp_packetizer->buf;
     rtp_header->version = 2;
     rtp_header->padding = 0;
@@ -222,11 +222,15 @@ static int rtp_packetizer_encode_generic(rtp_packetizer_t *rtp_packetizer, uint8
     rtp_packetizer->timestamp += size; // 8000 HZ.
     rtp_header->timestamp = htonl(rtp_packetizer->timestamp);
     rtp_header->ssrc = htonl(rtp_packetizer->ssrc);
-    memcpy(rtp_packetizer->buf + sizeof(rtp_header_t), buf, size);
+    if (size <= RTP_PAYLOAD_SIZE) {
+        memcpy(rtp_packetizer->buf + sizeof(rtp_header_t), buf, size);
+        rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
+        ret = 0;
+    } else {
+        JLOG_ERROR("rtp_packetizer packet size %ld is too large > %d", size, RTP_PAYLOAD_SIZE);
+    }
 
-    rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
-
-    return 0;
+    return ret;
 }
 
 void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, void (*on_packet)(char *packet, int bytes, void *user_data), void *user_data) {

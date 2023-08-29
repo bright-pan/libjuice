@@ -434,13 +434,13 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->name = name;
     pc->role = role;
     pc->options.video_codec = MEDIA_CODEC_H264;
-    pc->options.audio_codec = MEDIA_CODEC_NONE;
+    pc->options.audio_codec = MEDIA_CODEC_PCMA;
     pc->options.datachannel = 1;
 
     // pc loop
     pc->loop_thread = NULL;
     pc->loop_thread_ssize = 50*1024;
-    pc->loop_thread_prio = 31;    
+    pc->loop_thread_prio = 31;
     
     // rtp process
     pc->rtp_process_thread = NULL;
@@ -449,8 +449,8 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
 
     // rtp encode
     pc->rtp_enc_thread = NULL;
-    pc->rtp_enc_thread_ssize = 30*1024;
-    pc->rtp_enc_thread_prio = 31;
+    pc->rtp_enc_thread_ssize = 50*1024;
+    pc->rtp_enc_thread_prio = 30;
 }
 
 static int peer_connection_loop_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
@@ -495,6 +495,17 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     // // TODO: check if we have video or audio codecs
     sdp_create(&pc->local_sdp, b_video, b_audio, b_datachannel);
 
+    if (pc->options.audio_codec == MEDIA_CODEC_PCMA) {
+
+        sdp_append_pcma(&pc->local_sdp);
+        sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
+        if (pc->role == DTLS_SRTP_ROLE_SERVER) {
+            sdp_append(&pc->local_sdp, "a=setup:actpass");
+        } else {
+            sdp_append(&pc->local_sdp, "a=setup:active");
+        }
+        strcat(pc->local_sdp.content, description);
+    }
 
     if (pc->options.video_codec == MEDIA_CODEC_H264) {
 
@@ -510,18 +521,6 @@ static void peer_connection_state_start(peer_connection_t *pc) {
 
     if (pc->options.datachannel) {
         sdp_append_datachannel(&pc->local_sdp);
-        sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
-        if (pc->role == DTLS_SRTP_ROLE_SERVER) {
-            sdp_append(&pc->local_sdp, "a=setup:actpass");
-        } else {
-            sdp_append(&pc->local_sdp, "a=setup:active");
-        }
-        strcat(pc->local_sdp.content, description);
-    }
-
-    if (pc->options.audio_codec == MEDIA_CODEC_PCMA) {
-
-        sdp_append_pcma(&pc->local_sdp);
         sdp_append(&pc->local_sdp, "a=fingerprint:sha-256 %s", pc->dtls_srtp.local_fingerprint);
         if (pc->role == DTLS_SRTP_ROLE_SERVER) {
             sdp_append(&pc->local_sdp, "a=setup:actpass");
@@ -718,28 +717,17 @@ void peer_connection_init(peer_connection_t *pc) {
     // pc->loop_thread_entry = peer_connection_loop_thread_entry;
     // pc->loop_thread_entry = rtp_frame_process_thread_entry;
 
-//   if (pc->options.audio_codec) {
-// #ifdef HAVE_GST
-//     pc->audio_stream = media_stream_create(pc->options.audio_codec,
-//      pc->options.audio_outgoing_pipeline, pc->options.audio_incoming_pipeline);
-//     pc->audio_stream->outgoing_rb = pc->audio_rb;
-// #else
-//     rtp_packetizer_init(&pc->audio_packetizer, pc->options.audio_codec,
-//      peer_connection_set_cb_rtp_packet, pc->audio_rb);
-// #endif
-//   }
+
 
     if (pc->options.video_codec) {
-    #ifdef HAVE_GST
-        pc->video_stream = media_stream_create(pc->options.video_codec,
-        pc->options.video_outgoing_pipeline, pc->options.video_incoming_pipeline);
-        pc->video_stream->outgoing_rb = pc->video_rb;
-    #else
         rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
         peer_connection_set_cb_rtp_packet, pc);
-    #endif
     }
 
+    if (pc->options.audio_codec) {
+        rtp_packetizer_init(&pc->audio_packetizer, pc->options.audio_codec,
+        peer_connection_set_cb_rtp_packet, pc);
+    }
     peer_connection_loop_thread_init(pc, loop_thread_entry);
 }
 
