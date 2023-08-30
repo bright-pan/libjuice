@@ -37,9 +37,9 @@ static void on_state_change(peer_connection_state_t state, void *userdata) {
     peer_connection_t *pc = (peer_connection_t *)userdata;
     JLOG_INFO("%s state is changed: %d", pc->name, state);
 }
-static void on_receiver_packet_loss(float fraction_loss, uint32_t total_loss, void *userdata) {
+static void on_receiver_packet_loss(uint32_t ssrc, float fraction_loss, uint32_t total_loss, void *userdata) {
     peer_connection_t *pc = (peer_connection_t *)userdata;
-    JLOG_INFO("%s receiver packet: fraction_loss(%f) total_loss(%d)", pc->name, fraction_loss, total_loss);
+    JLOG_INFO("%s receiver packet: ssrc(%d), fraction_loss(%f) total_loss(%d)", pc->name, ssrc, fraction_loss, total_loss);
 }
 
 

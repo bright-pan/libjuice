@@ -19,14 +19,15 @@
 #include "thread.h"
 
 
-#define RTP_ENC_INTERVAL 10 //ms
+#define RTP_VIDEO_ENC_INTERVAL 10 //ms
+#define RTP_AUDIO_ENC_INTERVAL 10 //ms
 
 #define PCM_CAPTURE_HW_PARAMS_DIR 1
 #define PCM_CAPTURE_HW_PARAMS_FORMAT 16 // 16bit
 #define PCM_CAPTURE_HW_PARAMS_FRAME_SIZE (PCM_CAPTURE_HW_PARAMS_FORMAT / 8) // 16bit / 8 = 2bytes
 #define PCM_CAPTURE_HW_PARAMS_CHANNEL 1
 #define PCM_CAPTURE_HW_PARAMS_RATE 8000
-#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE 320// 25fps
+#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE 640// 25fps
 #define PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_CHANNEL * PCM_CAPTURE_HW_PARAMS_FRAME_SIZE)
 
 typedef struct {
@@ -230,28 +231,20 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 // }
 
 int rtp_enc_loop_flag = 0;
-char pcm_capture_buffer[PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE];
 
-static void *rtp_enc_thread_entry(void *param) {
+static void *rtp_video_enc_thread_entry(void *param) {
     peer_connection_t *pc = param;
     VENC_STREAM_S venc_stream = {0};
     VENC_PACK_S *pPack = NULL;
     int iPackid = 0;
-    pcm_t *pcm = &pcm_capture;
-    char pcm_capture_buffer[PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE];
-    char pcm_capture_enc_buffer[PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE];
 
-    thread_set_name_self("rtp_enc");
+    thread_set_name_self("rtp_video_enc");
     // video initialize
     LG_media_video_init(PARAM_RGB_PIPELINE);
-    // audio initialize
-    LG_media_audio_init();
-    // pcm device init
-    pcm_capture_init(pcm);
 
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
-        if (rtp_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
+        if (pc->rtp_audio_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             // JLOG_INFO("venc get stream------------------");
             if(MEDIA_VIDEO_VencGetStream(0, &venc_stream, 2000) == CVI_SUCCESS) {
                 //parse sps pps
@@ -280,11 +273,30 @@ static void *rtp_enc_thread_entry(void *param) {
                 }
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             }
+        }
+        usleep(RTP_VIDEO_ENC_INTERVAL*1000);
+    }
+    pthread_exit(&pc->rtp_video_enc_loop_flag);
+    return NULL;
+}
 
-            
+static void *rtp_audio_enc_thread_entry(void *param) {
+    peer_connection_t *pc = param;
+    pcm_t *pcm = &pcm_capture;
+    char pcm_capture_buffer[PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE];
+    char pcm_capture_enc_buffer[PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE];
+
+    thread_set_name_self("rtp_audio_enc");
+    // audio initialize
+    LG_media_audio_init();
+    // pcm device init
+    pcm_capture_init(pcm);
+
+    while (1) {
+        // flags = rtmp_event_get(RTMP_EVENT_MASK);
+        if (pc->rtp_audio_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             // memset(pcm_capture_buffer, 0, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
             // memset(pcm_capture_enc_buffer, 0, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
-
             int ret = aos_pcm_readi(pcm->handle, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
             if (ret > 0) {
                 int pcm_frame_size = ret * pcm->channel;
@@ -295,41 +307,61 @@ static void *rtp_enc_thread_entry(void *param) {
                 // JLOG_INFO_DUMP_HEX(pcm_capture_buffer, buffer_size, "pcm_capture_buffer: read_size=%d, buffer_size=%d", ret, buffer_size);
             }
         }
-        usleep(RTP_ENC_INTERVAL*1000);
+        usleep(RTP_AUDIO_ENC_INTERVAL*1000);
     }
-    pthread_exit(&rtp_enc_loop_flag);
+    pthread_exit(&pc->rtp_audio_enc_loop_flag);
     return NULL;
 }
 
-int rtp_enc_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
+int rtp_video_enc_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
     int ret = -1;
     thread_attr_t attr;
 
-    if (pc->rtp_enc_thread == NULL) {
-        thread_attr_init(&attr, pc->rtp_enc_thread_prio, pc->rtp_enc_thread_ssize);
-        ret = thread_init_ex(&pc->rtp_enc_thread, &attr, thread_entry, pc);
+    if (pc->rtp_video_enc_thread == NULL) {
+        thread_attr_init(&attr, pc->rtp_video_enc_thread_prio, pc->rtp_video_enc_thread_ssize);
+        ret = thread_init_ex(&pc->rtp_video_enc_thread, &attr, thread_entry, pc);
         if (ret != 0) {
-            JLOG_ERROR("rtp enc thread created failure!");
+            JLOG_ERROR("rtp_video_enc thread created failure!");
         } else {
-            JLOG_INFO("rtp enc thread created!");
+            JLOG_INFO("rtp_video_enc thread created!");
         }
     } else {
-        JLOG_ERROR("rtp enc thread has beed created!");
+        JLOG_ERROR("rtp_video_enc thread has beed created!");
     }
     return ret;
 }
 
+int rtp_audio_enc_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
+    int ret = -1;
+    thread_attr_t attr;
+
+    if (pc->rtp_audio_enc_thread == NULL) {
+        thread_attr_init(&attr, pc->rtp_audio_enc_thread_prio, pc->rtp_audio_enc_thread_ssize);
+        ret = thread_init_ex(&pc->rtp_audio_enc_thread, &attr, thread_entry, pc);
+        if (ret != 0) {
+            JLOG_ERROR("rtp_audio_enc thread created failure!");
+        } else {
+            JLOG_INFO("rtp_audio_enc thread created!");
+        }
+    } else {
+        JLOG_ERROR("rtp_audio_enc thread has beed created!");
+    }
+    return ret;
+}
 void rtp_enc_init(peer_connection_t *pc) {
-    rtp_enc_thread_init(pc, rtp_enc_thread_entry);
+    rtp_video_enc_thread_init(pc, rtp_video_enc_thread_entry);
+    rtp_audio_enc_thread_init(pc, rtp_audio_enc_thread_entry);
 }
 
 void rtp_enc_start(peer_connection_t *pc) {
     MEDIA_VIDEO_force_Iframe(0);
-    rtp_enc_loop_flag = 1;
+    pc->rtp_video_enc_loop_flag = 1;
+    pc->rtp_audio_enc_loop_flag = 1;
 }
 
 void rtp_enc_stop(peer_connection_t *pc) {
-    rtp_enc_loop_flag = 0;
+    pc->rtp_video_enc_loop_flag = 0;
+    pc->rtp_audio_enc_loop_flag = 0;
     usleep(1000*1000);
     peer_connection_reset_video_fifo(pc);
 }

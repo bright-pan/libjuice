@@ -4,7 +4,7 @@
 
 static int by_seq(const rtp_frame_t *a, const rtp_frame_t *b)
 {
-    return (a->seq - b->seq);
+    return (a->key.seq - b->key.seq);
 }
 
 static int by_bytes(const rtp_frame_t *a, const rtp_frame_t *b)
@@ -12,12 +12,13 @@ static int by_bytes(const rtp_frame_t *a, const rtp_frame_t *b)
     return (a->bytes - b->bytes);
 }
 
-rtp_frame_t *rtp_frame_malloc(int seq, const char *packet, int bytes) {
+rtp_frame_t *rtp_frame_malloc(uint32_t ssrc, int seq, const char *packet, int bytes) {
     rtp_frame_t *frame = NULL;
 
     frame = (rtp_frame_t *)uthash_malloc(sizeof(rtp_frame_t));
     if (frame) {
-        frame->seq = seq;
+        frame->key.seq = seq;
+        frame->key.ssrc = ssrc;
         frame->packet = uthash_malloc(bytes);
         frame->resend_count = RTP_FRAME_RESEND_COUNT;
         frame->bytes = bytes;
@@ -56,17 +57,24 @@ void rtp_list_unlock(rtp_list_t *rtp_list) {
     rwlock_unlock(&rtp_list->rwlock);
 }
 
+rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
+    rtp_frame_t l, *s;
+
+    memset(&l, 0, sizeof(rtp_frame_t));
+    l.key = key;
+    HASH_FIND(hh, rtp_list->utlist, &l.key, sizeof(rtp_frame_key_t), s);  /* seq already in the hash? */
+    return s;
+}
+
 int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size) {
     int ret = -1;
     rtp_frame_t *s;
 
     if (frame && (HASH_COUNT(rtp_list->utlist) <= size)) {
-        int seq = frame->seq;
-
-        HASH_FIND_INT(rtp_list->utlist, &seq, s);  /* seq already in the hash? */
+        s = rtp_list_find_by_key(rtp_list, frame->key); /* seq already in the hash? */
         if (s == NULL) {
-            s = frame;
-            HASH_ADD_INT(rtp_list->utlist, seq, s);  /* seq is the key field */
+            // HASH_ADD(seq, s);  /* seq is the key field */
+            HASH_ADD(hh, rtp_list->utlist, key, sizeof(rtp_frame_key_t), frame);
             ret = 0;
         }
     }
@@ -83,12 +91,14 @@ void rtp_list_pop(rtp_list_t *rtp_list, rtp_frame_t *frame) {
     }
 }
 
-rtp_frame_t *rtp_list_find_by_seq(rtp_list_t *rtp_list, int seq) {
-    rtp_frame_t *frame;
+// rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
+//     rtp_frame_t l, *s;
 
-    HASH_FIND_INT(rtp_list->utlist, &seq, frame);  /* frame: output pointer */
-    return frame;
-}
+//     memset(&l, 0, sizeof(rtp_frame_t));
+//     l.key = key;
+//     HASH_FIND(hh, rtp_list->utlist, &l.key, sizeof(rtp_frame_key_t), s);  /* seq already in the hash? */
+//     return s;
+// }
 
 void rtp_list_delete(rtp_list_t *rtp_list, rtp_frame_t *frame) {
     if (frame) {
@@ -110,11 +120,11 @@ void rtp_list_reset(rtp_list_t *rtp_list) {
     rtp_list_delete_all(rtp_list);
 }
 
-int rtp_list_delete_by_seq(rtp_list_t *rtp_list, int seq) {
+int rtp_list_delete_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
     int ret = -1;
     rtp_frame_t *frame;
 
-    frame = rtp_list_find_by_seq(rtp_list, seq);
+    frame = rtp_list_find_by_key(rtp_list, key);
     if (frame) {
         rtp_list_delete(rtp_list, frame);
         ret = 0;
@@ -137,13 +147,13 @@ void rtp_list_sort_by_seq(rtp_list_t *rtp_list) {
 static void rtp_frame_print(rtp_frame_t *frame) {
     if (frame) {
         JLOG_INFO("----------------------------");
-        JLOG_INFO_DUMP_HEX(frame->packet, frame->bytes, "seq %d: %d Bytes", frame->seq, frame->bytes);
+        JLOG_INFO_DUMP_HEX(frame->packet, frame->bytes, "key: %d, %d: %d Bytes", frame->key.ssrc, frame->key.seq, frame->bytes);
     }
 }
 
-void rtp_list_print_by_seq(rtp_list_t *rtp_list, int seq) {
+void rtp_list_print_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
     rtp_frame_t *frame;
-    frame = rtp_list_find_by_seq(rtp_list, seq);
+    frame = rtp_list_find_by_key(rtp_list, key);
     if (frame) {
         rtp_frame_print(frame);
     }

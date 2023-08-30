@@ -64,7 +64,7 @@ typedef struct peer_connect {
     void (*cb_state_change)(peer_connection_state_t state, void *user_data);
     void (*cb_track)(uint8_t *packet, size_t bytes, void *user_data);
     void (*cb_connected)(void *userdata);
-    void (*cb_receiver_packet_loss)(float fraction_loss, uint32_t total_loss, void *user_data);
+    void (*cb_receiver_packet_loss)(uint32_t ssrc, float fraction_loss, uint32_t total_loss, void *user_data);
 
     void *user_data;
 
@@ -92,9 +92,15 @@ typedef struct peer_connect {
     int rtp_process_thread_ssize; // stack size
     int rtp_process_thread_prio; // sche proirity
 
-    thread_t rtp_enc_thread; // thread handle
-    int rtp_enc_thread_ssize; // stack size
-    int rtp_enc_thread_prio; // sche proirity
+    thread_t rtp_video_enc_thread; // thread handle
+    int rtp_video_enc_loop_flag;
+    int rtp_video_enc_thread_ssize; // stack size
+    int rtp_video_enc_thread_prio; // sche proirity
+
+    thread_t rtp_audio_enc_thread; // thread handle
+    int rtp_audio_enc_loop_flag;
+    int rtp_audio_enc_thread_ssize; // stack size
+    int rtp_audio_enc_thread_prio; // sche proirity
 
     rtp_packetizer_t audio_packetizer;
     rtp_packetizer_t video_packetizer;
@@ -119,7 +125,7 @@ int peer_connection_dtls_send(void *ctx, const char *buf, size_t len);
  * @param[in] userdata for callback function
  */
 void peer_connection_set_cb_receiver_packet_loss(peer_connection_t *pc,
- void (*on_receiver_packet_loss)(float fraction_loss, uint32_t total_loss, void *userdata));
+ void (*on_receiver_packet_loss)(uint32_t ssrc, float fraction_loss, uint32_t total_loss, void *userdata));
 
 /**
  * @brief register callback function to handle event when the connection is established

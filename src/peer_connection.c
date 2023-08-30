@@ -22,13 +22,16 @@
 // Turn server config
 static juice_turn_server_t turn_server;
 
-int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
+int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
     int ret = -1;
+    rtp_frame_key_t key;
 
+    key.ssrc = ssrc;
+    key.seq = seq;
     rtp_list_wlock(&pc->rtp_cache_list);
-    rtp_frame_t *frame = rtp_list_find_by_seq(&pc->rtp_cache_list, pid);
+    rtp_frame_t *frame = rtp_list_find_by_key(&pc->rtp_cache_list, key);
     if (frame) {
-        JLOG_INFO("resend pid[%d]:%d", pid, frame->bytes);
+        JLOG_INFO("resend key[%d:%d]:%d", key.ssrc, key.seq, frame->bytes);
         // frame->timeout_count--;
         juice_send(pc->juice_agent, frame->packet, frame->bytes);
         if (ret == JUICE_ERR_SUCCESS) {
@@ -43,15 +46,15 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int pid) {
     return ret;
 }
 
-void peer_connection_rtp_frame_lost_process(peer_connection_t *pc, int pid, uint16_t lostmap) {
+void peer_connection_rtp_frame_lost_process(peer_connection_t *pc, int ssrc, int seq, uint16_t lostmap) {
 
-    peer_connection_send_rtp_frame(pc, pid++);
+    peer_connection_send_rtp_frame(pc, ssrc, seq++);
 
     if (lostmap) {
         for (int i = 0; i < 16; i++) {
             if (lostmap & bits_mask(i)) {
                 // pid_array[i+1] = pid++;
-                peer_connection_send_rtp_frame(pc, pid + i);
+                peer_connection_send_rtp_frame(pc, ssrc, seq + i);
             }
         }
     }
@@ -76,8 +79,9 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                         rtcp_rr_t rtcp_rr = rtcp_packet_parse_rr(rtcp_buf);
                         uint32_t fraction = ntohl(rtcp_rr.report_block[0].flcnpl) >> 24;
                         uint32_t total = ntohl(rtcp_rr.report_block[0].flcnpl) & 0x00FFFFFF;
+                        uint32_t rsrc = ntohl(rtcp_rr.report_block[0].rsrc);
                         if(pc->cb_receiver_packet_loss && fraction > 0) {
-                            pc->cb_receiver_packet_loss((float)fraction/256.0, total, pc);
+                            pc->cb_receiver_packet_loss(rsrc, (float)fraction/256.0, total, pc);
                         }
                     }
                     break;
@@ -90,11 +94,12 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                             nack_block_size = nack_block_size > RTCP_RTPFB_NACK_BLOCK_SIZE ? RTCP_RTPFB_NACK_BLOCK_SIZE : nack_block_size; // limit block size;
                             uint32_t ssrc_ps = ntohl(rtpfb_nack.ssrc_ps);
                             uint32_t ssrc_ms = ntohl(rtpfb_nack.ssrc_ms);
+                            JLOG_INFO("RTCP_FMT_RTPFB_NACK->ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
                             for (int i = 0; i < nack_block_size; i++) {
                                 uint16_t pid = ntohs(rtpfb_nack.nack_block[0].pid);
                                 uint16_t lostmap = ntohs(rtpfb_nack.nack_block[0].lostmap);
                                 // JLOG_INFO("pid:%d, lostmap:%04X, ssrc_ps:%d, ssrc_ms:%d", pid, lostmap, ssrc_ps, ssrc_ms);
-                                peer_connection_rtp_frame_lost_process(pc, pid, lostmap);
+                                peer_connection_rtp_frame_lost_process(pc, ssrc_ms, pid, lostmap);
                             }
                             break;
                         }
@@ -111,7 +116,7 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                             rtcp_psfb_pli_t psfb_pli = rtcp_packet_parse_psfb_pli(rtcp_buf);
                             uint32_t ssrc_ps = ntohl(psfb_pli.pli_block[0].ssrc_ps);
                             uint32_t ssrc_ms = ntohl(psfb_pli.pli_block[0].ssrc_ms);
-                            JLOG_INFO("ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
+                            JLOG_INFO("PSFB_PLI ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
                             break;
                         }
                         case RTCP_FMT_PSFB_REMB: {
@@ -128,7 +133,7 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                             // uint32_t num_ssrc = psfb_remb.remb_block[0].num_ssrc;
                             // uint32_t exp = psfb_remb.remb_block[0].exp;
                             // uint32_t mantissa = psfb_remb.remb_block[0].mantissa;
-                            JLOG_DEBUG("ssrc_ps:%d, ssrc_ms:%d, remb:%08X, num_ssrc:%d, br: %fkBps, ssrc_feedback:%d",
+                            JLOG_DEBUG("PSFB_REMB: ssrc_ps:%d, ssrc_ms:%d, remb:%08X, num_ssrc:%d, br: %fkBps, ssrc_feedback:%d",
                                         ssrc_ps, ssrc_ms, remb, num_ssrc, pow(2, exp) * mantissa / 1000, ssrc_feedback);
 
                             break;
@@ -156,8 +161,9 @@ static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *use
 
     peer_connection_t *pc = user_data;
     dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
-    // JLOG_INFO("add rtp frame[%d]", seq_number);
-    rtp_frame_t *frame = rtp_frame_malloc(ntohs(((rtp_header_t *)packet)->seq_number), packet, bytes);
+    // JLOG_INFO("add rtp frame[%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
+    rtp_frame_t *frame = rtp_frame_malloc(ntohl(((rtp_header_t *)packet)->ssrc),
+                                          ntohs(((rtp_header_t *)packet)->seq_number), packet, bytes);
     if (frame) {
         rtp_list_wlock(&pc->rtp_send_list);
         if (rtp_list_insert(&pc->rtp_send_list, frame) < 0) {
@@ -447,10 +453,16 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->rtp_process_thread_ssize = 50*1024;
     pc->rtp_process_thread_prio = 31;
 
-    // rtp encode
-    pc->rtp_enc_thread = NULL;
-    pc->rtp_enc_thread_ssize = 50*1024;
-    pc->rtp_enc_thread_prio = 30;
+    // rtp video encode
+    pc->rtp_video_enc_thread = NULL;
+    pc->rtp_video_enc_loop_flag = 0;
+    pc->rtp_video_enc_thread_ssize = 30*1024;
+    pc->rtp_video_enc_thread_prio = 31;
+    // rtp audio encode
+    pc->rtp_audio_enc_thread = NULL;
+    pc->rtp_audio_enc_loop_flag = 0;
+    pc->rtp_audio_enc_thread_ssize = 30*1024;
+    pc->rtp_audio_enc_thread_prio = 31;
 }
 
 static int peer_connection_loop_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
@@ -823,7 +835,7 @@ void peer_connection_set_cb_connected(peer_connection_t *pc, void (*on_connected
 }
 
 void peer_connection_set_cb_receiver_packet_loss(peer_connection_t *pc,
- void (*on_receiver_packet_loss)(float fraction_loss, uint32_t total_loss, void *userdata)) {
+ void (*on_receiver_packet_loss)(uint32_t ssrc, float fraction_loss, uint32_t total_loss, void *userdata)) {
 
   pc->cb_receiver_packet_loss = on_receiver_packet_loss;
 }
