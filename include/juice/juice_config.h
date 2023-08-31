@@ -62,10 +62,10 @@
 #define juice_assert(ptr)        aos_assert(ptr)
 
 
-#define RTP_FRAME_INTERVAL 5 //1000/30)
+#define RTP_FRAME_COUNT_INTERVAL 10 //1000/30)
 #define RTP_FRAME_TIMEOUT 1500
-#define RTP_FRAME_TIMEOUT_COUNT (RTP_FRAME_TIMEOUT / RTP_FRAME_INTERVAL)
-#define RTP_FRAME_RESEND_COUNT 3
+#define RTP_FRAME_TIMEOUT_COUNT (RTP_FRAME_TIMEOUT / RTP_FRAME_COUNT_INTERVAL)
+// #define RTP_FRAME_RESEND_COUNT 3
 
 // posix thread
 #if defined(__linux__) || defined(AOS_COMP_POSIX)

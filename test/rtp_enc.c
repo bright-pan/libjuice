@@ -20,14 +20,14 @@
 
 
 #define RTP_VIDEO_ENC_INTERVAL 10 //ms
-#define RTP_AUDIO_ENC_INTERVAL 10 //ms
+#define RTP_AUDIO_ENC_INTERVAL 40 //ms
 
 #define PCM_CAPTURE_HW_PARAMS_DIR 1
 #define PCM_CAPTURE_HW_PARAMS_FORMAT 16 // 16bit
 #define PCM_CAPTURE_HW_PARAMS_FRAME_SIZE (PCM_CAPTURE_HW_PARAMS_FORMAT / 8) // 16bit / 8 = 2bytes
 #define PCM_CAPTURE_HW_PARAMS_CHANNEL 1
 #define PCM_CAPTURE_HW_PARAMS_RATE 8000
-#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE 640// 25fps
+#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE 320// 25fps(40ms/packet)
 #define PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_CHANNEL * PCM_CAPTURE_HW_PARAMS_FRAME_SIZE)
 
 typedef struct {
@@ -230,8 +230,6 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 //     }
 // }
 
-int rtp_enc_loop_flag = 0;
-
 static void *rtp_video_enc_thread_entry(void *param) {
     peer_connection_t *pc = param;
     VENC_STREAM_S venc_stream = {0};
@@ -257,7 +255,6 @@ static void *rtp_video_enc_thread_entry(void *param) {
                     pPack = &venc_stream.pstPack[iPackid];
                     // peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
-                    usleep(1000*RTP_FRAME_INTERVAL);
                     //send fifo
                     // while (1) {
                     //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
@@ -272,9 +269,12 @@ static void *rtp_video_enc_thread_entry(void *param) {
                     // }
                 }
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
+            } else {
+                usleep(1000*RTP_VIDEO_ENC_INTERVAL);
             }
+        } else {
+            usleep(RTP_VIDEO_ENC_INTERVAL*1000);
         }
-        usleep(RTP_VIDEO_ENC_INTERVAL*1000);
     }
     pthread_exit(&pc->rtp_video_enc_loop_flag);
     return NULL;
@@ -362,8 +362,8 @@ void rtp_enc_start(peer_connection_t *pc) {
 void rtp_enc_stop(peer_connection_t *pc) {
     pc->rtp_video_enc_loop_flag = 0;
     pc->rtp_audio_enc_loop_flag = 0;
-    usleep(1000*1000);
-    peer_connection_reset_video_fifo(pc);
+    // usleep(1000*1000);
+    // peer_connection_reset_video_fifo(pc);
 }
 
 void rtp_enc_restart(peer_connection_t *pc) {

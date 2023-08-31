@@ -33,7 +33,7 @@ typedef struct {
     char *packet;
     int bytes;
     int timeout_count;
-    int resend_count;
+    int send_flag;
     UT_hash_handle hh;         /* makes this structure hashable */
 } rtp_frame_t;
 
@@ -61,7 +61,7 @@ int rtp_list_delete_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key);
 int rtp_list_count(rtp_list_t *rtp_list);
 void rtp_list_sort_by_bytes(rtp_list_t *rtp_list);
 void rtp_list_sort_by_key(rtp_list_t *rtp_list);
-void rtp_list_print_all(rtp_list_t *rtp_list);
-void rtp_list_print_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key);
+void rtp_list_print_all(rtp_list_t *rtp_list, int dump_hex_flag);
+void rtp_list_print_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key, int dump_hex_flag);
 
 #endif

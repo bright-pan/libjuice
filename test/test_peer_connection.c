@@ -55,6 +55,7 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s send raw|dtls message\n", argv[0]);
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
         return;
     }
 
@@ -168,6 +169,12 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         } else {
             JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         }
+    } else if (strstr(argv[1], "rtp_cache")) {
+        if (argc == 2) {
+            JLOG_INFO("rtp_send_cache_list count:%d", rtp_list_count(&pc->rtp_send_cache_list));
+        } else {
+            JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
+        }
     } else {
         JLOG_ERROR("Usage: %s create|start|remote|pair\n", argv[0]);
         JLOG_ERROR("Usage: %s get local|remote\n", argv[0]);
@@ -178,6 +185,7 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s send raw|dtls message\n", argv[0]);
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
     }
 }
 

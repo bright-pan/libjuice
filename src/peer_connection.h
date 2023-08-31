@@ -70,18 +70,17 @@ typedef struct peer_connect {
 
     // uint8_t temp_buf[CONFIG_MTU];
     packet_fifo_t dtls_fifo; //recv dtls
-    packet_fifo_t rtp_fifo; //recv rtp
-    packet_fifo_t other_fifo; // recv other
+    // packet_fifo_t rtp_fifo; //recv rtp
+    // packet_fifo_t other_fifo; // recv other
     // uint8_t agent_buf[CONFIG_MTU];
     // int agent_ret;
     int b_offer_created;
 
-    packet_fifo_t audio_fifo; //send audio
-    packet_fifo_t video_fifo; //send video
-    packet_fifo_t data_fifo; //send data
+    // packet_fifo_t audio_fifo; //send audio
+    // packet_fifo_t video_fifo; //send video
+    // packet_fifo_t data_fifo; //send data
 
-    rtp_list_t rtp_cache_list;
-    rtp_list_t rtp_send_list;
+    rtp_list_t rtp_send_cache_list; // has been sended frame cache list
 
     thread_t loop_thread; // thread handle
     int loop_thread_ssize; // stack size
@@ -190,7 +189,7 @@ void peer_connection_set_current_ip(const char *ip);
 
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end);
 
-void peer_connection_reset_video_fifo(peer_connection_t *pc);
+// void peer_connection_reset_video_fifo(peer_connection_t *pc);
 #ifdef __cplusplus
 }
 #endif
