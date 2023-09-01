@@ -50,7 +50,7 @@
 
 #define juice_malloc(size)       MEMPOOL_MALLOC(SRAM_RTMP, size)
 #define juice_free(ptr)          MEMPOOL_FREE(ptr)
-#define juice_calloc(n, size)    MEMPOOL_MALLOC(SRAM_RTMP, (n) * (size))
+#define juice_calloc(n, size)    MEMPOOL_CALLOC(SRAM_RTMP, n, size)
 #define juice_realloc(ptr, size) MEMPOOL_REALLOC(SRAM_RTMP, ptr, size)
 #else
 #define juice_malloc(size)       malloc(size)

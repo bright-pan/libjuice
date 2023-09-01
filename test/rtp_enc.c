@@ -254,7 +254,10 @@ static void *rtp_video_enc_thread_entry(void *param) {
                 {
                     pPack = &venc_stream.pstPack[iPackid];
                     // peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
+
+                    rtp_list_wlock(&pc->rtp_send_cache_list);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
+                     rtp_list_unlock(&pc->rtp_send_cache_list);
                     //send fifo
                     // while (1) {
                     //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
@@ -302,7 +305,9 @@ static void *rtp_audio_enc_thread_entry(void *param) {
                 int pcm_frame_size = ret * pcm->channel;
                 // pcm -> g711-alaw, 16bit to 8bit
                 pcm16_to_alaw(pcm_frame_size, pcm_capture_buffer, pcm_capture_enc_buffer);
+                rtp_list_wlock(&pc->rtp_send_cache_list);
                 rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_enc_buffer, pcm_frame_size);
+                rtp_list_unlock(&pc->rtp_send_cache_list);
                 // int buffer_size = ret * pcm->channel * (pcm->format / 8);
                 // JLOG_INFO_DUMP_HEX(pcm_capture_buffer, buffer_size, "pcm_capture_buffer: read_size=%d, buffer_size=%d", ret, buffer_size);
             }

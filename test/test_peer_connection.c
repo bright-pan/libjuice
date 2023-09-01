@@ -68,6 +68,8 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         peer_connection_init(pc);
     } else if (strstr(argv[1], "start")) {
             peer_connection_start(pc);
+    } else if (strstr(argv[1], "gather")) {
+            juice_gather_candidates(pc->juice_agent);
     } else if (strstr(argv[1], "remote")) {
         if (argc == 2) {
             juice_set_remote_description(pc->juice_agent, pc_remote->local_sdp.content);

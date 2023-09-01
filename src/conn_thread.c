@@ -50,6 +50,7 @@ int conn_thread_prepare(juice_agent_t *agent, struct pollfd *pfd, timestamp_t *n
 	conn_impl_t *conn_impl = agent->conn_impl;
 	mutex_lock(&conn_impl->mutex);
 	if (conn_impl->stopped) {
+		JLOG_ERROR("Stop connection thread");
 		mutex_unlock(&conn_impl->mutex);
 		return 0;
 	}
@@ -68,6 +69,7 @@ int conn_thread_process(juice_agent_t *agent, struct pollfd *pfd) {
 	conn_impl_t *conn_impl = agent->conn_impl;
 	mutex_lock(&conn_impl->mutex);
 	if (conn_impl->stopped) {
+		JLOG_ERROR("Stop connection thread");
 		ret = -1;
 		goto __exit;
 	}
@@ -92,6 +94,7 @@ int conn_thread_process(juice_agent_t *agent, struct pollfd *pfd) {
 		}
 		if (len < 0) {
 			agent_conn_fail(agent);
+			JLOG_ERROR("Agent conn failed");
 			ret = -1;
 			goto __exit;
 		}
@@ -161,7 +164,7 @@ int conn_thread_run(juice_agent_t *agent) {
 		usleep(1);
 	}
 
-	JLOG_DEBUG("Leaving connection thread");
+	JLOG_ERROR("Leaving connection thread");
 	return 0;
 }
 
@@ -172,6 +175,9 @@ int conn_thread_init(juice_agent_t *agent, conn_registry_t *registry, udp_socket
 	if (!conn_impl) {
 		JLOG_FATAL("Memory allocation failed for connection impl");
 		return -1;
+	}
+	if (conn_impl->stopped) {
+		JLOG_FATAL("stopped value error [%d] for connection impl", conn_impl->stopped);
 	}
 
 	conn_impl->sock = udp_create_socket(config);

@@ -20,7 +20,6 @@
 #include "stun.h"
 #include "turn.h"
 #include "udp.h"
-#include "config.h"
 
 #include <assert.h>
 #include <inttypes.h>

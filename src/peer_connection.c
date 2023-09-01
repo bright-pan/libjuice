@@ -175,12 +175,10 @@ static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *use
             frame->timeout_count = 0;
         }
         // insert into rtp cache list
-        rtp_list_wlock(&pc->rtp_send_cache_list);
         if (rtp_list_insert(&pc->rtp_send_cache_list, frame) < 0) {
             JLOG_ERROR("insert rtp send cache list error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
             rtp_frame_free(frame);
         }
-        rtp_list_unlock(&pc->rtp_send_cache_list);
     } else {
         JLOG_ERROR("rtp frame malloc error!");
     }
