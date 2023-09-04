@@ -905,6 +905,7 @@ _mqtt_start:
     }
 
     c->tick_ping = aos_now_ms();
+    c->ping_flag = 0;
 
     int res;
     uint32_t tick_now;
@@ -972,7 +973,6 @@ _mqtt_start:
                 JLOG_ERROR("Ping Response timeout res: %dS, %d, and disconnect", ping_time, c->ping_flag);
                 goto _mqtt_disconnect;
             }
-            
         } /* res == 0: timeout for ping. */
 
         if (res < 0)
