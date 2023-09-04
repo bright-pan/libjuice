@@ -17,6 +17,7 @@
 #include "peer_connection.h"
 #include "sdp.h"
 #include "udp.h"
+#include "utils.h"
 #include "log.h"
 
 
@@ -185,7 +186,7 @@ static int mqtt_start(int argc, char **argv)
         client.offline_callback = mqtt_offline_callback;
 
         /* set subscribe table and event callback */
-        client.messageHandlers[0].topicFilter = strdup(MQTT_SUBTOPIC);
+        client.messageHandlers[0].topicFilter = alloc_string_copy(MQTT_SUBTOPIC, NULL);
         client.messageHandlers[0].callback = mqtt_sub_callback;
         client.messageHandlers[0].qos = QOS1;
 

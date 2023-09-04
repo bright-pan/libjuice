@@ -18,6 +18,7 @@
 #include <lwip/netifapi.h>
 #include <MQTTPacket.h>
 #include "paho_mqtt.h"
+#include "utils.h"
 #include "log.h"
 
 
@@ -285,7 +286,20 @@ static int sendPacket(MQTTClient *c, int length)
 static int net_read(MQTTClient *c, unsigned char *buf,  int len, int timeout)
 {
     int bytes = 0;
-    int rc;
+    int rc, ret;
+    fd_set readset;
+
+    // struct timeval tv;
+
+    // tv.tv_sec = 0;
+    // tv.tv_usec = 100*1000;
+
+    // setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
+
+    struct timeval interval;
+
+    interval.tv_sec = 0;
+    interval.tv_usec = 1000000;
 
     while (bytes < len)
     {
@@ -293,7 +307,7 @@ static int net_read(MQTTClient *c, unsigned char *buf,  int len, int timeout)
 
         if (rc == -1)
         {
-            if (errno != ENOTCONN && errno != ECONNRESET)
+            if (errno == ENOTCONN || errno == ECONNRESET)
             {
                 bytes = -1;
                 break;
@@ -309,19 +323,22 @@ static int net_read(MQTTClient *c, unsigned char *buf,  int len, int timeout)
 
         if (timeout > 0)
         {
-            fd_set readset;
-            struct timeval interval;
+            while (1) {
+                timeout  -= 100;
+                JLOG_VERBOSE("net_read %d:%d, timeout:%d\n", bytes, len, timeout);
+                // setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
 
-            JLOG_INFO("net_read %d:%d, timeout:%d\n", bytes, len, timeout);
-            timeout  = 0;
+                FD_ZERO(&readset);
+                FD_SET(c->sock, &readset);
 
-            interval.tv_sec = 1;
-            interval.tv_usec = 0;
-
-            FD_ZERO(&readset);
-            FD_SET(c->sock, &readset);
-
-            select(c->sock + 1, &readset, NULL, NULL, &interval);
+                ret = select(c->sock + 1, &readset, NULL, NULL, &interval);
+                if (ret == 0) {
+                    // timeout
+                    continue;
+                } else {
+                    break;
+                }
+            }
         }
         else
         {
@@ -377,8 +394,12 @@ static int MQTTPacket_readPacket(MQTTClient *c)
     decodePacket(c, &rem_len, 50);
     len += MQTTPacket_encode(c->readbuf + 1, rem_len); /* put the original remaining length back into the buffer */
 
+    if (len + rem_len > c->readbuf_size) {
+        JLOG_FATAL("packet read is too large: length:%d ,readbuf_size:%d", len + rem_len, c->readbuf_size);
+        goto exit;
+    }
     /* 3. read the rest of the buffer using a callback to supply the rest of the data */
-    if (rem_len > 0 && (net_read(c, c->readbuf + len, rem_len, 300) != rem_len))
+    if (rem_len > 0 && (net_read(c, c->readbuf + len, rem_len, rem_len + 1000) != rem_len))
         goto exit;
 
     header.byte = c->readbuf[0];
@@ -692,6 +713,7 @@ static int MQTT_cycle(MQTTClient *c)
         break;
     case PINGRESP:
         c->tick_ping = aos_now_ms();
+        c->ping_flag = 0;
         break;
     }
 
@@ -883,23 +905,33 @@ _mqtt_start:
     }
 
     c->tick_ping = aos_now_ms();
+
+    int res;
+    uint32_t tick_now;
+    fd_set readset;
+    struct timeval timeout;
+    uint32_t ping_time;
+    // int ping_flag = 0;
+
     while (1)
     {
-        int res;
-        uint32_t tick_now;
-        fd_set readset;
-        struct timeval timeout;
-
         tick_now = aos_now_ms();
-        if (((tick_now - c->tick_ping) / 1000) > (c->keepAliveInterval - 5))
+        ping_time = (tick_now - c->tick_ping) / 1000;
+
+        if (ping_time > (c->keepAliveInterval - 5))
         {
-            timeout.tv_sec = 1;
-            //JLOG_INFO("tick close to ping.\n");
+            timeout.tv_sec = 5;
+            if (!c->ping_flag) {
+                c->ping_flag = 1;
+                JLOG_VERBOSE("tick close to ping, %d", ping_time);
+            } else {
+                JLOG_VERBOSE("continue to ping, %d", ping_time);
+            }
         }
         else
         {
-            timeout.tv_sec = c->keepAliveInterval - 10 - (tick_now - c->tick_ping) / 1000;
-            //JLOG_INFO("timeount for ping: %d\n", timeout.tv_sec);
+            timeout.tv_sec = (c->keepAliveInterval - ping_time) / 2;
+            JLOG_VERBOSE("timeout for ping: %d, ping_time: %d\n", timeout.tv_sec, ping_time);
         }
         timeout.tv_usec = 0;
 
@@ -910,43 +942,54 @@ _mqtt_start:
         /* int select(maxfdp1, readset, writeset, exceptset, timeout); */
         res = select(((c->pub_sock > c->sock) ? c->pub_sock : c->sock) + 1,
                           &readset, NULL, NULL, &timeout);
-        if (res == 0)
+        if (res == 0 && c->ping_flag)
         {
-            len = MQTTSerialize_pingreq(c->buf, c->buf_size);
-            rc = sendPacket(c, len);
-            if (rc != 0)
-            {
-                JLOG_INFO("[%d] send ping rc: %d \n", aos_now_ms(), rc);
+            if (c->ping_flag++ < 5) {
+                len = MQTTSerialize_pingreq(c->buf, c->buf_size);
+                rc = sendPacket(c, len);
+                if (rc != 0)
+                {
+                    JLOG_ERROR("[%d] send ping rc: %d \n", aos_now_ms(), rc);
+                    // goto _mqtt_disconnect;
+                } else {
+                    // ping_flag = 0;
+                    JLOG_VERBOSE("ping on running time: %ds\n", ping_time);
+                }
+                // wait Ping Response.
+                // timeout.tv_sec = 5;
+                // timeout.tv_usec = 0;
+
+                // FD_ZERO(&readset);
+                // FD_SET(c->sock, &readset);
+
+                // res = select(c->sock + 1, &readset, NULL, NULL, &timeout);
+                // if (res <= 0)
+                // {
+                //     JLOG_ERROR("[%d] Ping Response timeout res: %d, and disconnect", aos_now_ms(), res);
+                //     goto _mqtt_disconnect;
+                // }
+            } else {
+                JLOG_ERROR("Ping Response timeout res: %dS, %d, and disconnect", ping_time, c->ping_flag);
                 goto _mqtt_disconnect;
             }
-
-            /* wait Ping Response. */
-            timeout.tv_sec = 5;
-            timeout.tv_usec = 0;
-
-            FD_ZERO(&readset);
-            FD_SET(c->sock, &readset);
-
-            res = select(c->sock + 1, &readset, NULL, NULL, &timeout);
-            if (res <= 0)
-            {
-                JLOG_INFO("[%d] wait Ping Response res: %d\n", aos_now_ms(), res);
-                goto _mqtt_disconnect;
-            }
-        } /* res == 0: timeount for ping. */
+            
+        } /* res == 0: timeout for ping. */
 
         if (res < 0)
         {
-            JLOG_INFO("select res: %d\n", res);
+            JLOG_ERROR("select res: %d, and disconnect", res);
             goto _mqtt_disconnect;
         }
 
         if (FD_ISSET(c->sock, &readset))
         {
-            //JLOG_INFO("sock FD_ISSET\n");
+            JLOG_VERBOSE("sock FD_ISSET\n");
             rc_t = MQTT_cycle(c);
-            //JLOG_INFO("sock FD_ISSET rc_t : %d\n", rc_t);
-            if (rc_t < 0)    goto _mqtt_disconnect;
+            JLOG_VERBOSE("sock FD_ISSET rc_t : %d\n", rc_t);
+            if (rc_t < 0) {
+                // goto _mqtt_disconnect;
+                JLOG_ERROR("MQTT_cycle process failed");
+            }
 
             continue;
         }
@@ -958,7 +1001,7 @@ _mqtt_start:
             MQTTMessage *message;
             MQTTString topic = MQTTString_initializer;
 
-            //JLOG_INFO("pub_sock FD_ISSET\n");
+            JLOG_VERBOSE("pub_sock FD_ISSET\n");
 
             len = recvfrom(c->pub_sock, c->readbuf, c->readbuf_size, MSG_DONTWAIT,
                            (struct sockaddr *)&pub_client_addr, &addr_len);
@@ -969,7 +1012,7 @@ _mqtt_start:
                 char client_ip_str[16]; /* ###.###.###.### */
                 strcpy(client_ip_str,
                        inet_ntoa(*((struct in_addr *) & (pub_client_addr.sin_addr))));
-                JLOG_INFO("pub_sock recvfrom len: %s, skip!\n", client_ip_str);
+                JLOG_VERBOSE("pub_sock recvfrom len: %s, skip!\n", client_ip_str);
 #endif
                 continue;
             }
@@ -977,11 +1020,11 @@ _mqtt_start:
             if (len < sizeof(MQTTMessage))
             {
                 c->readbuf[len] = '\0';
-                JLOG_INFO("pub_sock recv %d byte: %s\n", len, c->readbuf);
+                JLOG_VERBOSE("pub_sock recv %d byte: %s\n", len, c->readbuf);
 
                 if (strcmp((const char *)c->readbuf, "DISCONNECT") == 0)
                 {
-                    JLOG_INFO("DISCONNECT\n");
+                    JLOG_ERROR("DISCONNECT\n");
                     goto _mqtt_disconnect_exit;
                 }
 
@@ -997,14 +1040,15 @@ _mqtt_start:
                                         topic, (unsigned char *)message->payload, message->payloadlen);
             if (len <= 0)
             {
-                JLOG_INFO("MQTTSerialize_publish len: %d\n", len);
-                goto _mqtt_disconnect;
+                JLOG_ERROR_DUMP_HEX(c->buf, c->buf_size, "MQTTSerialize_publish %s failed, %d", topic.cstring, len);
+                // JLOG_ERROR("MQTTSerialize_publish %s failed, %d", topic.cstring, len);
+                // goto _mqtt_disconnect;
             }
 
             if ((rc = sendPacket(c, len)) != PAHO_SUCCESS) // send the subscribe packet
             {
-                JLOG_INFO("MQTTSerialize_publish sendPacket rc: %d\n", rc);
-                goto _mqtt_disconnect;
+                JLOG_ERROR_DUMP_HEX((unsigned char *)message->payload, message->payloadlen, "sendPacket %s failed, %d", topic.cstring, rc);
+                // goto _mqtt_disconnect;
             }
             if (c->isblocking && aos_sem_is_valid(&c->pub_sem))
             {
@@ -1014,6 +1058,7 @@ _mqtt_start:
     } /* while (1) */
 
 _mqtt_disconnect:
+    JLOG_ERROR("MQTT disconnect!\n");
     MQTTDisconnect(c);
 _mqtt_restart:
     if (c->offline_callback)
@@ -1023,7 +1068,7 @@ _mqtt_restart:
 
     net_disconnect(c);
     aos_msleep(c->reconnect_interval > 0 ? c->reconnect_interval * 1000 : 1000 * 5);
-    JLOG_INFO("restart!\n");
+    JLOG_ERROR("MQTT restart!\n");
     goto _mqtt_start;
 
 _mqtt_disconnect_exit:
@@ -1031,7 +1076,7 @@ _mqtt_disconnect_exit:
     net_disconnect_exit(c);
 
 _mqtt_exit:
-    JLOG_INFO("MQTT server is disconnected.");
+    JLOG_ERROR("MQTT server is disconnected.");
 
     return;
 }
@@ -1149,7 +1194,7 @@ int paho_mqtt_subscribe(MQTTClient *client, enum QoS qos, const char *topic, sub
         }
 
         client->messageHandlers[i].qos = qos;
-        client->messageHandlers[i].topicFilter = strdup((char *)topic);
+        client->messageHandlers[i].topicFilter = alloc_string_copy((char *)topic, NULL);
         if (callback)
         {
             client->messageHandlers[i].callback = callback;

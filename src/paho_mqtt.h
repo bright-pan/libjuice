@@ -75,6 +75,7 @@ struct MQTTClient
     int isblocking;
     int isconnected;
     uint32_t tick_ping;
+    int ping_flag;
 
     void (*connect_callback)(MQTTClient *);
     void (*online_callback)(MQTTClient *);

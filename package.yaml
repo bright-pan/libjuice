@@ -81,6 +81,7 @@ source_file:
   - "src/paho_mqtt_udp.c"
   - "src/rtp_list.c"
   - "src/thread.c"
+  - "src/utils.c"
   - "test/*.c"
 
 ## 第五部分：配置信息

@@ -48,10 +48,14 @@
 #if defined(JUICE_USE_MEMPOOL)
 #include "mempool.h"
 
-#define juice_malloc(size)       MEMPOOL_MALLOC(SRAM_RTMP, size)
-#define juice_free(ptr)          MEMPOOL_FREE(ptr)
-#define juice_calloc(n, size)    MEMPOOL_CALLOC(SRAM_RTMP, n, size)
-#define juice_realloc(ptr, size) MEMPOOL_REALLOC(SRAM_RTMP, ptr, size)
+#define SRAM_JUICE SRAM_RTMP
+
+#define juice_malloc(size)       MEMPOOL_MALLOC(SRAM_JUICE, size)
+#define juice_free(ptr)          do { \
+    if (ptr) MEMPOOL_FREE(ptr); \
+} while(0)
+#define juice_calloc(n, size)    MEMPOOL_CALLOC(SRAM_JUICE, n, size)
+#define juice_realloc(ptr, size) MEMPOOL_REALLOC(SRAM_JUICE, ptr, size)
 #else
 #define juice_malloc(size)       malloc(size)
 #define juice_free(ptr)          free(ptr)

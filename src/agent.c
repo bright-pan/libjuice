@@ -44,21 +44,6 @@
 #define BUFFER_SIZE 4096
 #define DEFAULT_MAX_RECORDS_COUNT 8
 
-static char *alloc_string_copy(const char *orig, bool *alloc_failed) {
-	if (!orig)
-		return NULL;
-
-	char *copy = juice_malloc(strlen(orig) + 1);
-	if (!copy) {
-		if (alloc_failed)
-			*alloc_failed = true;
-
-		return NULL;
-	}
-	strcpy(copy, orig);
-	return copy;
-}
-
 juice_agent_t *agent_create(const juice_config_t *config) {
 	JLOG_VERBOSE("Creating agent");
 

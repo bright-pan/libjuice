@@ -17,6 +17,7 @@
 #include "thread.h"
 #include "timestamp.h"
 #include "turn.h"
+#include "utils.h"
 
 #include <stdbool.h>
 #include <stdint.h>
