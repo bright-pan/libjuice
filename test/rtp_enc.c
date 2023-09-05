@@ -3,6 +3,8 @@
 
 #include <media_audio.h>
 #include <alsa/pcm.h>
+#include <cviaudio_algo_interface.h>
+#include <cvi_comm_aio.h>
 #include <g711.h>
 #include <g711_table.h>
 
@@ -16,32 +18,66 @@
 // #include "cvi_param.h"
 #include "rtp.h"
 #include "rtp_enc.h"
+#include "peer_connection.h"
 #include "thread.h"
+#include "audio_demo.h"
 
+
+#define ENABLE_3A_DATA 1
+
+#define MIC_AUDIO_LEFT 0
+#define MIC_AUDIO_RIGHT 1
 
 #define RTP_VIDEO_ENC_INTERVAL 10 //ms
-#define RTP_AUDIO_ENC_INTERVAL 40 //ms
+#define RTP_AUDIO_ENC_INTERVAL 20 //ms
 
 #define PCM_CAPTURE_HW_PARAMS_DIR 1
-#define PCM_CAPTURE_HW_PARAMS_FORMAT 16 // 16bit
-#define PCM_CAPTURE_HW_PARAMS_FRAME_SIZE (PCM_CAPTURE_HW_PARAMS_FORMAT / 8) // 16bit / 8 = 2bytes
-#define PCM_CAPTURE_HW_PARAMS_CHANNEL 1
+#define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH 16 // 16bit depth
+#define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE (PCM_CAPTURE_HW_PARAMS_BIT_DEPTH / 8) // 16bit / 8 = 2bytes
+#define PCM_CAPTURE_HW_PARAMS_CHANNEL 2
 #define PCM_CAPTURE_HW_PARAMS_RATE 8000
 #define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE 320// 25fps(40ms/packet)
-#define PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_CHANNEL * PCM_CAPTURE_HW_PARAMS_FRAME_SIZE)
+#define PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_CHANNEL * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE)
+
+#define CVIAUDIO_CHANNEL PCM_CAPTURE_HW_PARAMS_CHANNEL
+#define CVIAUDIO_PER_SAMPLE PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE
+#define CVIAUDIO_AEC_LENGTH 160
+
 
 typedef struct {
     aos_pcm_t *handle;
     int dir;
     unsigned int rate;
-    int format;
+    int bit_depth;
     int period_size;
     int buffer_size;
     int channel;
 } pcm_t;
 
+// typedef struct {
+//     short *mic_in;
+//     short *ref_in;
+//     short *datain;
+//     short *dataout;
+// } audio_buf_t;
+
+typedef struct {
+    pcm_t *pcm;
+
+    AI_TALKVQE_CONFIG_S stVqeConfig;
+    void *pssp_handle;
+
+    short *mic_in;
+    short *ref_in;
+    short *datain;
+    short *dataout;
+} audio_t;
+
 static pcm_t pcm_capture;
+static audio_t audio_capture;
 // rtp_pcm_t rtp_pcm_play;
+
+// static audio_buf_t stbufinfo;
 
 static int pcm_init(pcm_t *pcm, char *name, aos_pcm_stream_t stream) {
     int ret = -1;
@@ -59,7 +95,7 @@ static int pcm_init(pcm_t *pcm, char *name, aos_pcm_stream_t stream) {
     hw_params->buffer_size = pcm->buffer_size;
 
     aos_pcm_hw_params_set_access(pcm->handle, hw_params, AOS_PCM_ACCESS_RW_INTERLEAVED);
-    aos_pcm_hw_params_set_format(pcm->handle, hw_params, pcm->format);
+    aos_pcm_hw_params_set_format(pcm->handle, hw_params, pcm->bit_depth);
     aos_pcm_hw_params_set_rate_near(pcm->handle, hw_params, &pcm->rate, &pcm->dir);
     aos_pcm_hw_params_set_channels(pcm->handle, hw_params, pcm->channel);
     aos_pcm_hw_params(pcm->handle, hw_params);
@@ -75,7 +111,7 @@ static int pcm_capture_init(pcm_t *pcm) {
 
     pcm->rate = PCM_CAPTURE_HW_PARAMS_RATE;
     pcm->channel = PCM_CAPTURE_HW_PARAMS_CHANNEL;
-    pcm->format = PCM_CAPTURE_HW_PARAMS_FORMAT;
+    pcm->bit_depth = PCM_CAPTURE_HW_PARAMS_BIT_DEPTH;
     pcm->dir = PCM_CAPTURE_HW_PARAMS_DIR;
     pcm->period_size = PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE;
     pcm->buffer_size = PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE;
@@ -84,6 +120,7 @@ static int pcm_capture_init(pcm_t *pcm) {
 
     return ret;
 }
+
 
 // //start code is 4 or 3 byte
 // static int get_startcode_size(unsigned char * pData)
@@ -230,6 +267,125 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 //     }
 // }
 
+
+static void audio_3a_init(audio_t *audio)
+{
+    char pstrVersion[52];
+    int channel = audio->pcm->channel;/* only support 2chn*/
+    int capture_rate = audio->pcm->rate;
+    int AecLenByte = 0;
+
+    AI_TALKVQE_CONFIG_S *pstVqeConfig = &audio->stVqeConfig;
+
+    pstVqeConfig->para_client_config = 0;
+    pstVqeConfig->u32OpenMask = AI_TALKVQE_MASK_AEC | AI_TALKVQE_MASK_AGC | AI_TALKVQE_MASK_ANR;//
+    pstVqeConfig->s32WorkSampleRate = capture_rate;
+    pstVqeConfig->s32RevMask = 0;
+    pstVqeConfig->para_notch_freq = 0;
+    /* AEC */
+    pstVqeConfig->stAecCfg.para_aec_filter_len = 13;
+    pstVqeConfig->stAecCfg.para_aes_std_thrd = 37;
+    pstVqeConfig->stAecCfg.para_aes_supp_coeff = 60;
+    /* ANR */
+    pstVqeConfig->stAnrCfg.para_nr_snr_coeff = 15;
+    pstVqeConfig->stAnrCfg.para_nr_init_sile_time = 0;
+
+    /* AGC */
+    pstVqeConfig->stAgcCfg.para_agc_max_gain = 3;
+    pstVqeConfig->stAgcCfg.para_agc_target_high = 2;
+    pstVqeConfig->stAgcCfg.para_agc_target_low = 6;
+    pstVqeConfig->stAgcCfg.para_agc_vad_ena = 0;
+
+    pstVqeConfig->stAecDelayCfg.para_aec_init_filter_len = 2;
+    pstVqeConfig->stAecDelayCfg.para_dg_target = 1;
+    pstVqeConfig->stAecDelayCfg.para_delay_sample = 1;
+
+    CviAud_Algo_GetVersion(pstrVersion);
+    JLOG_INFO("[cvi3aVersion:%s]\n", pstrVersion);
+
+    audio->pssp_handle = CviAud_Algo_Init(pstVqeConfig->u32OpenMask, pstVqeConfig);
+    if (!audio->pssp_handle) {
+        JLOG_ERROR("cvi3a init fail\n");
+        return;
+    }
+
+    AecLenByte = CVIAUDIO_AEC_LENGTH * channel * CVIAUDIO_PER_SAMPLE;
+    audio->mic_in = juice_malloc(AecLenByte);
+    audio->ref_in = juice_malloc(AecLenByte);
+    audio->datain = juice_malloc(AecLenByte);
+    audio->dataout = juice_malloc(AecLenByte);
+}
+
+static void audio_init(audio_t *audio) {
+    pcm_capture_init(&pcm_capture);
+    audio->pcm = &pcm_capture;
+    audio_3a_init(audio);
+}
+
+static int audio_mono2stereo(audio_t *audio, const short *src_audio, short *dst_audio, int size)
+{
+    for (int i = 0; i < size; i++)
+    {
+        for (int channel_num = 0; channel_num < audio->pcm->channel; channel_num++)
+            dst_audio[audio->pcm->channel * i + channel_num] = src_audio[i];
+    }
+    return size;
+}
+
+static int audio_stereo2mono(audio_t *audio, const short *src_audio, short *dst_audio, int size, int channel_num)
+{
+    for (int i = 0; i < size; i++)
+    {
+        dst_audio[i] = src_audio[i * audio->pcm->channel + channel_num];
+    }
+    return size;
+}
+
+static void audio_3a_process(audio_t *audio, char *pMicIn,int frameSize ,char *pMicOut,int frameDataSize)
+{
+    int RetframeLen = 0;
+    int doIndex = 0,doDataIndex = 0;
+    AI_TALKVQE_CONFIG_S *pstVqeConfig = &audio->stVqeConfig;
+    short sAudioData[CVIAUDIO_AEC_LENGTH * CVIAUDIO_CHANNEL] = {0};
+    int doDatasize = CVIAUDIO_AEC_LENGTH * sizeof(short);
+    int doStep = doDatasize * CVIAUDIO_CHANNEL;
+
+    int doCount = frameSize / CVIAUDIO_AEC_LENGTH;
+    for(doIndex = 0;doIndex < doCount;doIndex++)
+    {
+        doDataIndex = doIndex * doStep;
+        #if ENABLE_3A_DATA
+        memcpy(audio->datain, &pMicIn[doDataIndex], doStep);
+        for (int i = 0; i < CVIAUDIO_AEC_LENGTH; i++) {
+            audio->mic_in[i] = audio->datain[i * 2 + MIC_AUDIO_LEFT];
+            audio->ref_in[i] = audio->datain[i * 2 + MIC_AUDIO_RIGHT];
+        }
+
+        if ((pstVqeConfig->u32OpenMask & AI_TALKVQE_MASK_AEC) == AI_TALKVQE_MASK_AEC) {//aec
+            RetframeLen = CviAud_Algo_Process(audio->pssp_handle, audio->mic_in, audio->ref_in, audio->dataout, CVIAUDIO_AEC_LENGTH);
+            if (RetframeLen != CVIAUDIO_AEC_LENGTH) {
+                JLOG_ERROR("[aec] ssp process fail\n");
+                return ;
+            }
+        } else {
+            RetframeLen = CviAud_Algo_Process(audio->pssp_handle, audio->mic_in, NULL, audio->dataout, CVIAUDIO_AEC_LENGTH);
+            if (RetframeLen != CVIAUDIO_AEC_LENGTH) {
+                JLOG_ERROR("[anr agc] ssp process fail\n");
+                return;
+            }
+        }
+
+        audio_mono2stereo(audio, audio->dataout, sAudioData, CVIAUDIO_AEC_LENGTH);//left short + right short = len*2 short
+        #else
+        memcpy((char*)&sAudioData[0],(char*)&pMicIn[doDataIndex],doStep);
+        #endif
+        if(frameDataSize >= doDataIndex + doStep)
+        {
+            memcpy((char*)&pMicOut[doDataIndex],(char*)&sAudioData[0],doStep);//short = 2*char
+        }
+    }
+}
+
 static void *rtp_video_enc_thread_entry(void *param) {
     peer_connection_t *pc = param;
     VENC_STREAM_S venc_stream = {0};
@@ -239,6 +395,13 @@ static void *rtp_video_enc_thread_entry(void *param) {
     thread_set_name_self("rtp_video_enc");
     // video initialize
     LG_media_video_init(PARAM_RGB_PIPELINE);
+
+    if (pc->options.video_codec) {
+        uint32_t now_timestamp = aos_now_ms();
+        rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
+                            now_timestamp,
+                            peer_connection_set_cb_rtp_packet, pc);
+    }
 
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
@@ -257,7 +420,7 @@ static void *rtp_video_enc_thread_entry(void *param) {
 
                     rtp_list_wlock(&pc->rtp_send_cache_list);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
-                     rtp_list_unlock(&pc->rtp_send_cache_list);
+                    rtp_list_unlock(&pc->rtp_send_cache_list);
                     //send fifo
                     // while (1) {
                     //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
@@ -285,7 +448,7 @@ static void *rtp_video_enc_thread_entry(void *param) {
 
 static void *rtp_audio_enc_thread_entry(void *param) {
     peer_connection_t *pc = param;
-    pcm_t *pcm = &pcm_capture;
+    audio_t *audio = &audio_capture;
     char pcm_capture_buffer[PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE];
     char pcm_capture_enc_buffer[PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE];
 
@@ -293,24 +456,35 @@ static void *rtp_audio_enc_thread_entry(void *param) {
     // audio initialize
     LG_media_audio_init();
     // pcm device init
-    pcm_capture_init(pcm);
+    audio_init(audio);
+
+    if (pc->options.audio_codec) {
+        uint32_t now_timestamp = aos_now_ms();
+        rtp_packetizer_init(&pc->audio_packetizer, pc->options.audio_codec,
+                            now_timestamp,
+                            peer_connection_set_cb_rtp_packet, pc);
+    }
 
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
         if (pc->rtp_audio_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             // memset(pcm_capture_buffer, 0, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
             // memset(pcm_capture_enc_buffer, 0, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
-            int ret = aos_pcm_readi(pcm->handle, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
+            int ret = aos_pcm_readi(audio->pcm->handle, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
+            // int ret = pcm_read_demo((unsigned char *)pcm_capture_buffer, __2_pcm);
             if (ret > 0) {
-                int pcm_frame_size = ret * pcm->channel;
-                // pcm -> g711-alaw, 16bit to 8bit
-                pcm16_to_alaw(pcm_frame_size, pcm_capture_buffer, pcm_capture_enc_buffer);
+                // CVI 3a process
+                audio_3a_process(audio, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
+                audio_stereo2mono(audio, (short *)pcm_capture_buffer, (short *)pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, MIC_AUDIO_LEFT);
+                // pcm -> g711-alaw, 16bit to 8bit, mono channel
+                pcm16_to_alaw(PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE, pcm_capture_enc_buffer, pcm_capture_buffer);
                 rtp_list_wlock(&pc->rtp_send_cache_list);
-                rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_enc_buffer, pcm_frame_size);
+                rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
                 rtp_list_unlock(&pc->rtp_send_cache_list);
-                // int buffer_size = ret * pcm->channel * (pcm->format / 8);
+                // int buffer_size = ret * pcm->channel * (pcm->bit_depth / 8);
                 // JLOG_INFO_DUMP_HEX(pcm_capture_buffer, buffer_size, "pcm_capture_buffer: read_size=%d, buffer_size=%d", ret, buffer_size);
             }
+            // memcpy(pcm_capture_buffer, )
         }
         usleep(RTP_AUDIO_ENC_INTERVAL*1000);
     }

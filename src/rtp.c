@@ -233,11 +233,11 @@ static int rtp_packetizer_encode_generic(rtp_packetizer_t *rtp_packetizer, uint8
     return ret;
 }
 
-void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, void (*on_packet)(char *packet, int bytes, void *user_data), void *user_data) {
+void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, uint32_t timestamp, void (*on_packet)(char *packet, int bytes, void *user_data), void *user_data) {
 
     rtp_packetizer->on_packet = on_packet;
     rtp_packetizer->user_data = user_data;
-    rtp_packetizer->timestamp = 0;
+    rtp_packetizer->timestamp = timestamp;
     rtp_packetizer->seq_number = 0;
 
     switch (codec) {

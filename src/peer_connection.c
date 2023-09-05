@@ -162,7 +162,7 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
     }
 }
 
-static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *user_data) {
+void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *user_data) {
     int ret;
     peer_connection_t *pc = user_data;
     dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
@@ -184,14 +184,14 @@ static void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *use
     }
 }
 
-static void *rtp_process_thread_entry(void *args)
+static void *rtp_push_thread_entry(void *args)
 {
     int ret = 0;
     rtp_frame_t *frame;
     rtp_frame_t *tmp;
     peer_connection_t *pc = args;
 
-    thread_set_name_self("rtp_process");
+    thread_set_name_self("rtp_push");
 
     while (1) {
         // rtp_list_wlock(&pc->rtp_send_list);
@@ -226,13 +226,13 @@ static void *rtp_process_thread_entry(void *args)
     return NULL;
 }
 
-int peer_connection_rtp_process_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
+int peer_connection_rtp_push_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
     int ret = -1;
     thread_attr_t attr;
 
-    if (pc->rtp_process_thread == NULL) {
-        thread_attr_init(&attr, pc->rtp_process_thread_prio, pc->rtp_process_thread_ssize);
-        ret = thread_init_ex(&pc->rtp_process_thread, &attr, thread_entry, pc);
+    if (pc->rtp_push_thread == NULL) {
+        thread_attr_init(&attr, pc->rtp_push_thread_prio, pc->rtp_push_thread_ssize);
+        ret = thread_init_ex(&pc->rtp_push_thread, &attr, thread_entry, pc);
         if (ret != 0) {
             JLOG_ERROR("rtp process thread created failure!");
         } else {
@@ -460,23 +460,24 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
 
     // pc loop
     pc->loop_thread = NULL;
-    pc->loop_thread_ssize = 50*1024;
+    pc->loop_thread_ssize = 32*1024;
     pc->loop_thread_prio = 31;
-    
-    // rtp process
-    pc->rtp_process_thread = NULL;
-    pc->rtp_process_thread_ssize = 50*1024;
-    pc->rtp_process_thread_prio = 31;
+
+    // rtp push
+    pc->rtp_push_thread = NULL;
+    pc->rtp_push_thread_ssize = 16*1024;
+    pc->rtp_push_thread_prio = 31;
 
     // rtp video encode
     pc->rtp_video_enc_thread = NULL;
     pc->rtp_video_enc_loop_flag = 0;
-    pc->rtp_video_enc_thread_ssize = 30*1024;
+    pc->rtp_video_enc_thread_ssize = 16*1024;
     pc->rtp_video_enc_thread_prio = 31;
+
     // rtp audio encode
     pc->rtp_audio_enc_thread = NULL;
     pc->rtp_audio_enc_loop_flag = 0;
-    pc->rtp_audio_enc_thread_ssize = 30*1024;
+    pc->rtp_audio_enc_thread_ssize = 16*1024;
     pc->rtp_audio_enc_thread_prio = 31;
 }
 
@@ -657,7 +658,7 @@ void *loop_thread_entry(void *param) {
 
         //             dtls_srtp_write(&pc->dtls_srtp, pc->juice_agent_buf, bytes);
         //          }
-                    peer_connection_rtp_process_thread_init(pc, rtp_process_thread_entry);
+                    peer_connection_rtp_push_thread_init(pc, rtp_push_thread_entry);
                     STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
                 }
                 // if ((pc->juice_agent_ret = agent_recv(pc->juice_agent, pc->juice_agent_buf, sizeof(pc->juice_agent_buf))) > 0) {
@@ -735,18 +736,6 @@ void peer_connection_init(peer_connection_t *pc) {
     pc->dtls_srtp.udp_send = (mbedtls_ssl_send_t *)peer_connection_dtls_send;
     // pc->loop_thread_entry = peer_connection_loop_thread_entry;
     // pc->loop_thread_entry = rtp_frame_process_thread_entry;
-
-
-
-    if (pc->options.video_codec) {
-        rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
-        peer_connection_set_cb_rtp_packet, pc);
-    }
-
-    if (pc->options.audio_codec) {
-        rtp_packetizer_init(&pc->audio_packetizer, pc->options.audio_codec,
-        peer_connection_set_cb_rtp_packet, pc);
-    }
     peer_connection_loop_thread_init(pc, loop_thread_entry);
 }
 

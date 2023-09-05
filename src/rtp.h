@@ -84,7 +84,7 @@ struct rtp_packetizer {
 
 int rtp_packet_validate(uint8_t *packet, size_t size);
 
-void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec,
+void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, uint32_t timestamp,
                          void (*on_packet)(char *packet, int bytes, void *user_data),
                          void *user_data);
 

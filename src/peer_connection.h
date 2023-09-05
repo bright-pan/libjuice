@@ -85,11 +85,10 @@ typedef struct peer_connect {
     thread_t loop_thread; // thread handle
     int loop_thread_ssize; // stack size
     int loop_thread_prio; // sche proirity
-    
 
-    thread_t rtp_process_thread; // thread handle
-    int rtp_process_thread_ssize; // stack size
-    int rtp_process_thread_prio; // sche proirity
+    thread_t rtp_push_thread; // thread handle
+    int rtp_push_thread_ssize; // stack size
+    int rtp_push_thread_prio; // sche proirity
 
     thread_t rtp_video_enc_thread; // thread handle
     int rtp_video_enc_loop_flag;
@@ -188,6 +187,8 @@ int peer_connection_send_video(peer_connection_t *pc, const uint8_t *packet, siz
 void peer_connection_set_current_ip(const char *ip);
 
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end);
+
+void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *user_data);
 
 // void peer_connection_reset_video_fifo(peer_connection_t *pc);
 #ifdef __cplusplus
