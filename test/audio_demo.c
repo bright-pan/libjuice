@@ -16165,12 +16165,6 @@ unsigned char pcm_demo_data[] = {
   0xff, 0xff, 0xfd, 0xff, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0xfe, 0xff
 };
 
-
-#define PCM_DEMO_LENGTH 193932
-
-#define READ_PERIOD_SIZE 320
-#define READ_BUFFER_SIZE (READ_PERIOD_SIZE * 2 * 2)
-
 int audio_demo_readi(unsigned char *dst) {
     static int i = 0;
     static int pcm_demo_frame_size = PCM_DEMO_LENGTH / READ_BUFFER_SIZE;

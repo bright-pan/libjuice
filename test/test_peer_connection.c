@@ -88,6 +88,18 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         } else {
             JLOG_ERROR("Usage: %s rtp_enc init|start|stop|restart\n", argv[0]);
         }
+   } else if (strstr(argv[1], "rtp_dec")) {
+        if (strstr(argv[2], "init")) {
+            rtp_dec_init(pc);
+        } else if (strstr(argv[2], "start")) {
+            rtp_dec_start(pc);
+        } else if (strstr(argv[2], "stop")) {
+            rtp_dec_stop(pc);
+        } else if (strstr(argv[2], "restart")) {
+            rtp_dec_restart(pc);
+        } else {
+            JLOG_ERROR("Usage: %s rtp_enc init|start|stop|restart\n", argv[0]);
+        }
    } else if (strstr(argv[1], "push")) {
         if (strstr(argv[2], "offer")) {
             mqtt_offer_publish(pc->local_sdp.content);

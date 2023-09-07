@@ -81,6 +81,7 @@ typedef struct peer_connect {
     // packet_fifo_t data_fifo; //send data
 
     rtp_list_t rtp_send_cache_list; // has been sended frame cache list
+    rtp_list_t rtp_recv_cache_list; // has been sended frame cache list
 
     thread_t loop_thread; // thread handle
     int loop_thread_ssize; // stack size
@@ -99,6 +100,11 @@ typedef struct peer_connect {
     int rtp_audio_enc_loop_flag;
     int rtp_audio_enc_thread_ssize; // stack size
     int rtp_audio_enc_thread_prio; // sche proirity
+
+    thread_t rtp_audio_dec_thread; // thread handle
+    int rtp_audio_dec_loop_flag;
+    int rtp_audio_dec_thread_ssize; // stack size
+    int rtp_audio_dec_thread_prio; // sche proirity
 
     rtp_packetizer_t audio_packetizer;
     rtp_packetizer_t video_packetizer;

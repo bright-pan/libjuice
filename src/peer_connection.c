@@ -52,17 +52,16 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
 }
 
 void peer_connection_rtp_frame_lost_process(peer_connection_t *pc, int ssrc, int seq, uint16_t lostmap) {
-
-    peer_connection_send_rtp_frame(pc, ssrc, seq++);
-
     if (lostmap) {
-        for (int i = 0; i < 16; i++) {
+        for (int i = 15; i >= 0; i--) {
             if (lostmap & bits_mask(i)) {
                 // pid_array[i+1] = pid++;
-                peer_connection_send_rtp_frame(pc, ssrc, seq + i);
+                if (peer_connection_send_rtp_frame(pc, ssrc, seq + i + 1) < 0)
+                    return; // return for not found
             }
         }
     }
+    peer_connection_send_rtp_frame(pc, ssrc, seq);
 }
 
 static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, size_t len) {
@@ -79,7 +78,16 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
         // JLOG_INFO_DUMP_HEX(rtcp_buf, rtcp_len, "rtcp_type:%d", rtcp_header.type);
         if (offset + rtcp_len <= len) {
             switch(rtcp_header.type) {
+                case RTCP_SDES: {
+                    // 源描述（Source Description）
+                    break;
+                }
+                case RTCP_SR: {
+                    // 发送端报告（Sender Report）
+                    break;
+                }
                 case RTCP_RR: {
+                    // 接收端报告（Receiver Report）
                     if(rtcp_header.rc > 0) {
                         rtcp_rr_t rtcp_rr = rtcp_packet_parse_rr(rtcp_buf);
                         uint32_t fraction = ntohl(rtcp_rr.report_block[0].flcnpl) >> 24;
@@ -151,7 +159,7 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                     break;
                 }
                 default: {
-                    JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "--------------unknow rtcp type[%d] parse, rtcp_buf[%d]-----------", rtcp_header.type);
+                    JLOG_ERROR_DUMP_HEX(rtcp_buf, rtcp_len, "--------------unknow rtcp type[%d] parse, rtcp_buf[%d]-----------", rtcp_header.type, rtcp_len);
                     break;
                 }
             }
@@ -170,7 +178,7 @@ void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *user_data)
     rtp_header_t *pheader = (rtp_header_t *)packet;
     rtp_frame_t *frame = rtp_frame_malloc(ntohl(pheader->ssrc), ntohs(pheader->seq_number), packet, bytes);
     if (frame) {
-        // audio stream send only , dont need cached
+        // audio stream send only one time, dont need cached
         if (pheader->type == RTP_PAYLOAD_TYPE_PCMA) {
             frame->timeout_count = 0;
         }
@@ -403,13 +411,24 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
         } else {
             ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, buf, &bytes);
             if (ret == srtp_err_status_ok) {
-                // JLOG_INFO("rtp packet[%d]:", bytes);
-                // JLOG_INFO_DUMP_HEX(buf, bytes);
+                rtp_header_t *pheader = (rtp_header_t *)buf;
+                rtp_frame_t *frame = rtp_frame_malloc(ntohl(pheader->ssrc), ntohs(pheader->seq_number), buf, bytes);
+                // JLOG_INFO_DUMP_HEX(buf, bytes, "recv rtp packet[%d],ssrc:%d,seq:%d-->", bytes, ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
+                if (frame) {
+                    // insert into rtp cache list
+                    rtp_list_wlock(&pc->rtp_recv_cache_list);
+                    if (rtp_list_insert(&pc->rtp_recv_cache_list, frame) < 0) {
+                        // JLOG_ERROR("insert rtp recv cache list error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
+                        rtp_frame_free(frame);
+                    }
+                    rtp_list_unlock(&pc->rtp_recv_cache_list);
+                } else {
+                    JLOG_ERROR("rtp frame malloc error!");
+                }
             } else {
                 JLOG_INFO_DUMP_HEX(data, size, "--------------invalid[%d] rtp packet[%d]---------------", ret, bytes);
             }
         }
-        //packet_fifo_write(&pc->rtp_fifo, (char *)data, size);
         return;
     }
     if((buf[0]>=20)  && (buf[0]<=64)) {
@@ -465,7 +484,7 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
 
     // rtp push
     pc->rtp_push_thread = NULL;
-    pc->rtp_push_thread_ssize = 16*1024;
+    pc->rtp_push_thread_ssize = 32*1024;
     pc->rtp_push_thread_prio = 31;
 
     // rtp video encode
@@ -479,6 +498,12 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->rtp_audio_enc_loop_flag = 0;
     pc->rtp_audio_enc_thread_ssize = 16*1024;
     pc->rtp_audio_enc_thread_prio = 31;
+
+    // rtp audio decode
+    pc->rtp_audio_dec_thread = NULL;
+    pc->rtp_audio_dec_loop_flag = 0;
+    pc->rtp_audio_dec_thread_ssize = 32*1024;
+    pc->rtp_audio_dec_thread_prio = 31;
 }
 
 static int peer_connection_loop_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
@@ -569,6 +594,7 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     packet_fifo_reset(&pc->dtls_fifo);
 
     rtp_list_init(&pc->rtp_send_cache_list);
+    rtp_list_init(&pc->rtp_recv_cache_list);
 
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }

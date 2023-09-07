@@ -9,6 +9,11 @@
 
 #include "sdp.h"
 
+/*
+    SDP语法可参考：
+    https://webrtchacks.com/sdp-anatomy/
+*/
+
 int sdp_append(sdp_t *sdp, const char *format, ...) {
 
     va_list argptr;
@@ -34,6 +39,10 @@ void sdp_append_h264(sdp_t *sdp) {
 
     // sdp_append(sdp, "m=video 9 UDP/TLS/RTP/SAVPF 102 103");
     sdp_append(sdp, "m=video 9 UDP/TLS/RTP/SAVPF 102");
+    sdp_append(sdp, "c=IN IP4 0.0.0.0");
+    sdp_append(sdp, "a=mid:1");
+    sdp_append(sdp, "a=sendonly");
+    sdp_append(sdp, "a=rtcp-mux");
     sdp_append(sdp, "a=rtpmap:102 H264/90000");
     // sdp_append(sdp, "a=rtcp-fb:102 goog-remb");
     // sdp_append(sdp, "a=rtcp-fb:102 transport-cc");
@@ -44,21 +53,29 @@ void sdp_append_h264(sdp_t *sdp) {
     // sdp_append(sdp, "a=rtpmap:103 rtx/90000");
     // sdp_append(sdp, "a=fmtp:103 apt=102");
     sdp_append(sdp, "a=ssrc:123456 cname:webrtc-h264");
-    sdp_append(sdp, "a=sendonly");
-    sdp_append(sdp, "a=mid:1");
-    sdp_append(sdp, "c=IN IP4 0.0.0.0");
-    sdp_append(sdp, "a=rtcp-mux");
 }
 
 void sdp_append_pcma(sdp_t *sdp) {
 
+    /*
+        https://www.ietf.org/archive/id/draft-garcia-mmusic-multiple-ptimes-problem-02.html
+
+        maxptime specify the maximum amount of media that can be encapsulated in each packet,
+        expressed as time in milliseconds. The size of the packet can have side effects in the
+        quality of the audio and the BW. It is possible to modify this values in the SDP.
+
+        PCMA default：160samples/20ms, 160bytes/packet
+        800samples/100ms, 800bytes/packet
+    */
+
     sdp_append(sdp, "m=audio 9 UDP/TLS/RTP/SAVPF 8");
-    sdp_append(sdp, "a=rtpmap:8 PCMA/8000");
-    sdp_append(sdp, "a=ssrc:4 cname:webrtc-pcma");
-    sdp_append(sdp, "a=sendonly");
-    sdp_append(sdp, "a=mid:0");
     sdp_append(sdp, "c=IN IP4 0.0.0.0");
+    sdp_append(sdp, "a=mid:0");
+    sdp_append(sdp, "a=sendrecv");
     sdp_append(sdp, "a=rtcp-mux");
+    sdp_append(sdp, "a=rtpmap:8 PCMA/8000");
+    // sdp_append(sdp, "a=ptime:60");
+    sdp_append(sdp, "a=ssrc:4 cname:webrtc-pcma");
 }
 
 void sdp_append_pcmu(sdp_t *sdp) {

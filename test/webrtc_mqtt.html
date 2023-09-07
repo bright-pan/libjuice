@@ -71,10 +71,6 @@
             <div id="player">
                 <video tabindex="0" id="remotevideo" class="mainvideo" controls="controls" height="480" width="640" muted=""></video>
                 <video tabindex="0" id="localvideo" controls="controls" height="96" width="160" muted=""></video></div>
-                <div>
-                    <h2>sdp</h2>
-                    <textarea id="sdp"></textarea>
-                </div>
             </div>
             <div>
                 <button id="initButton">本地初始化</button>
@@ -82,8 +78,6 @@
                 <button id="closeButton" disabled>停止</button>
                 <button id="sendButton" disabled>发送</button>
                 <button id="switchButton">ID互换</button>
-                <button id="setSdpButton">setSdp</button>
-
             </div>
             <div>
                 <h3>LOCAL ID</h3>
@@ -172,7 +166,7 @@
             const switchButton = document.getElementById('switchButton');
             const startButton = document.getElementById('startButton');
             const closeButton = document.getElementById('closeButton');
-            const setSdpButton = document.getElementById('setSdpButton');
+            // const setSdpButton = document.getElementById('setSdpButton');
             const sendButton = document.getElementById('sendButton');
 
             sendButton.onclick = sendData;
@@ -185,10 +179,10 @@
             let sendChannel;
             let receiveChannel;
             const constraints = window.constraints = {
-                audio: false,
-                video: true
+                audio: true,
+                video: false
             };
-            let localstream;
+            let localStream;
             const offerOptions = {
                 // New spec states offerToReceiveAudio/Video are of type long (due to
                 // having to tell how many "m" lines to generate).
@@ -199,6 +193,32 @@
                 // voiceActivityDetection: vadInput.checked
             };
 
+            function handleSuccess(stream) {
+                        const audioTracks = stream.getAudioTracks();
+                        if (audioTracks.length === 1) {
+                            localStream = stream;
+                            localvideo.srcObject = localStream;
+                            localvideo.play();
+                            const videoTracks = localStream.getVideoTracks();
+                            const audioTracks = localStream.getAudioTracks();
+                            if (videoTracks.length > 0) {
+                                console.log(`Using video device: ${videoTracks[0].label}`);
+                            }
+                            if (audioTracks.length > 0) {
+                                console.log(`Using audio device: ${audioTracks[0].label}`);
+                            }
+                            localStream.oninactive = () => {
+                                console.log('Stream inactive:', localStream);
+                            };
+                        } else {
+                                console.log('The media stream contains an invalid number of audio tracks.');
+                                localStream.getTracks().forEach(track => track.stop());
+                        }
+                    }
+
+            function handleFailure(error) {
+                console.log(`Failed to get access to local media. Error: ${error.name}`);
+            }
             initButton.onclick = async () => {
                 initButton.disabled = true;
                 startButton.disabled = false;
@@ -272,12 +292,7 @@
                 client.on('close', () => {
                     console.log(local_view.value + ' disconnected')
                 })
-
                 await createPeerConnection();
-                // localstream = await navigator.mediaDevices.getUserMedia(constraints);
-                // localvideo.srcObject = localstream;
-                // localvideo.play();
-                // pc.addStream(localstream);
             };
 
             switchButton.onclick = async () => {
@@ -286,6 +301,28 @@
                 remote_view.value = value
             };
 
+            function onCreateSessionDescriptionError(error) {
+                console.log(`Failed to create session description: ${error.toString()}`);
+            }
+
+            function onSetSessionDescriptionError(error) {
+                console.log(`Failed to set session description: ${error.toString()}`);
+            }
+
+            function onCreateOfferSuccess(desc) {
+                console.log(`Offer from pc\n${desc.sdp}`);
+                console.log('pc setLocalDescription start');
+                pc.setLocalDescription(desc).then(() => onSetLocalSuccess(pc), onSetSessionDescriptionError);
+                // console.log({ type: 'offer', sdp: offer.sdp })
+                remote_PostMessage({ type: 'offer', sdp: desc.sdp });
+            }
+            function onSetLocalSuccess(pc) {
+                console.log(`pc setLocalDescription complete`);
+            }
+
+            function onSetRemoteSuccess(pc) {
+                console.log(`pc setRemoteDescription complete`);
+            }
             startButton.onclick = async () => {
                 startButton.disabled = true;
                 closeButton.disabled = false;
@@ -294,21 +331,22 @@
                 sendChannel.onopen = onSendChannelStateChange;
                 sendChannel.onmessage = onSendChannelMessageCallback;
                 sendChannel.onclose = onSendChannelStateChange;
-                const offer = await pc.createOffer(offerOptions);
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                console.log('Adding Local Stream to peer connection');
+                console.log('createOffer start');
+                pc.createOffer(offerOptions).then(onCreateOfferSuccess, onCreateSessionDescriptionError);
+                // const offer = await pc.createOffer(offerOptions);
                 // const offer = await pc.createOffer();
-                console.log({ type: 'offer', sdp: offer.sdp })
-                remote_PostMessage({ type: 'offer', sdp: offer.sdp });
-                await pc.setLocalDescription(offer);
             };
 
             closeButton.onclick = async () => {
                 hangup();
                 remote_PostMessage({ type: 'bye' });
             };
-            setSdpButton.onclick = async () => {
-                obj = JSON.parse(sdp_receive.value);
-                handleAnswer(obj);
-            };
+            // setSdpButton.onclick = async () => {
+            //     obj = JSON.parse(sdp_receive.value);
+            //     handleAnswer(obj);
+            // };
             async function hangup() {
                 if (pc) {
                     pc.close();
@@ -326,6 +364,13 @@
             };
             function createPeerConnection() {
                 pc = new RTCPeerConnection(configuration);
+
+                console.log('Requesting local stream');
+                navigator.mediaDevices
+                    .getUserMedia(constraints)
+                    .then(handleSuccess)
+                    .catch(handleFailure);
+
                 pc.onicecandidate = e => {
                     const message = {
                         type: 'candidate',
