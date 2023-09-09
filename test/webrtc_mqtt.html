@@ -21,7 +21,7 @@
 
     <base target="_blank">
 
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="./mqtt.min.js"></script>
     <title>Transmit text (between two tabs)</title>
     <style>
         #buttons {
@@ -110,11 +110,12 @@
 
 
             local_view = document.getElementById('local_id');
-            local_view.value = "mqttjs_3f770906"
+            local_view.value = "W_1V1_SWQ00001_1V1_00:FF:AF:CD:97:21"
             remote_view = document.getElementById('remote_id');
-            remote_view.value = "mqttjs_bd853a81"
+            remote_view.value = "D_1V1_SWQ00001_1V1_00:FF:AF:CD:97:21"
 
-            const host = 'ws://broker.emqx.io:8083/mqtt'
+            // const host = 'ws://broker.emqx.io:8083/mqtt'
+            const host = 'ws://122.114.60.74:8083/mqtt'
             // const host = 'ws://192.168.12.193:8080/mqtt'
             // const host = 'ws://mqtt.eclipseprojects.io:80/mqtt'
 
@@ -224,12 +225,15 @@
                 startButton.disabled = false;
                 const options = {
                     keepalive: 30,
-                    clientId: local_view.value,
                     protocolId: 'MQTT',
                     protocolVersion: 4,
-                    clean: true,
+                    clean: true, // retain session
                     reconnectPeriod: 1000,
                     connectTimeout: 30 * 1000,
+                    // Authentication information
+                    clientId: local_view.value,
+                    username: 'nanmu0001',
+                    password: 'nanmu0001!@#$%',
                     will: {
                         topic: 'WillMsg',
                         payload: 'Connection Closed abnormally..!',
@@ -255,6 +259,7 @@
                     console.log(local_view.value + ' connected mqtt:' + host)
                     client.subscribe(webrtc_topic_prefix + local_view.value, { qos: 0 })
                     console.log('subscribe: ' + webrtc_topic_prefix + local_view.value)
+                    console.log('publish: ' + webrtc_topic_prefix + remote_view.value)
                 })
 
                 client.on('message', (topic, message, packet) => {

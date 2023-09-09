@@ -139,6 +139,8 @@ int MQTTPublish(MQTTClient *client, const char *topic, MQTTMessage *message);
  * @return the error code, 0 on start successfully.
  */
 int paho_mqtt_stop(MQTTClient *client);
+int paho_mqtt_ping(MQTTClient *client);
+int paho_mqtt_cycle(MQTTClient *client);
 
 /**
  * This function send an MQTT subscribe packet and wait for suback before returning.

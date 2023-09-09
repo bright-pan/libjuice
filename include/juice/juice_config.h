@@ -29,11 +29,14 @@
 #define MQTT_THREAD_STACK_SIZE 50000
 #define MQTT_CLIENT_BUF_SIZE SDP_CONTENT_LENGTH
 
-#define MQTT_URI                "tcp://broker.emqx.io:1883"
+#define MQTT_URI                "tcp://122.114.60.74:1883"
 // #define MQTT_URI                "tcp://mqtt.eclipseprojects.io:1883"
 // #define MQTT_URI                "tcp://192.168.12.193:1883"
-#define MQTT_SUBTOPIC           "/webrtc/mqttjs_bd853a81"
-#define MQTT_PUBTOPIC           "/webrtc/mqttjs_3f770906"
+#define MQTT_USERNAME           "nanmu0001"
+#define MQTT_PASSWORD           "nanmu0001!@#$%"
+#define MQTT_CLIENTID           "D_1V1_SWQ00001_1V1_00:FF:AF:CD:97:21"
+#define MQTT_SUBTOPIC           "/webrtc/D_1V1_SWQ00001_1V1_00:FF:AF:CD:97:21"
+#define MQTT_PUBTOPIC           "/webrtc/W_1V1_SWQ00001_1V1_00:FF:AF:CD:97:21"
 #define MQTT_WILLMSG            "Goodbye!"
 #define MQTT_WILLFLAG           0
 

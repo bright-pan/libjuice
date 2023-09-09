@@ -279,26 +279,32 @@ uint32_t rtc_fifo_read_timeout(rtc_fifo_t *fifo, void *outbuf, uint32_t len, uin
 */
 
 int peer_connection_dtls_recv(void *ctx, char *buf, size_t len) {
-    int recv_count;
-    dtls_srtp_t *dtls_srtp = (dtls_srtp_t *) ctx; 
+    int ret = 0;
+    int recv_count = 0;
+    dtls_srtp_t *dtls_srtp = (dtls_srtp_t *) ctx;
     peer_connection_t *pc = (peer_connection_t *) dtls_srtp->user_data;
     uint32_t timeout_count = TIMEOUT_COUNT(pc->recv_timeout, PER_TIMEOUT);
 
-    while (timeout_count > 0) {
+    while (timeout_count > 0 && recv_count < len) {
         // recv_count = msg_fifo_read(&pc->msg_fifo, &recv_frame);
-        recv_count = packet_fifo_read(&pc->dtls_fifo, buf, len);
-        if (recv_count > 0) {
+        ret = packet_fifo_read(&pc->dtls_fifo, buf + recv_count, len - recv_count);
+        if (ret > 0) {
             // recv_count = MIN(len, recv_frame.data_size);
             // memcpy(buf, recv_frame.data, recv_count);
-            return recv_count;
+            recv_count += ret;
         } else {
             // no data
             usleep(1000 * PER_TIMEOUT);
             timeout_count--;
         }
     }
-    return MBEDTLS_ERR_SSL_WANT_READ;
+    if (recv_count > 0) {
+        return recv_count;
+    } else {
+        return MBEDTLS_ERR_SSL_WANT_READ;
+    }
 }
+
 /*
 extern int dtls_srtp_udp_recv(void *ctx, char *buf, size_t len);
 

@@ -38,6 +38,73 @@
 
 static uint16_t pub_port = 7000;
 
+static char *strcpt(int cpt) {
+    static char *ret;
+    switch (cpt) {
+        case CONNECT : {
+            ret = "CONNECT";
+            break;
+        }
+        case CONNACK : {
+            ret = "CONNACK";
+            break;
+        }
+        case PUBLISH : {
+            ret = "PUBLISH";
+            break;
+        }
+        case PUBACK : {
+            ret = "PUBACK";
+            break;
+        }
+        case PUBREC : {
+            ret = "PUBREC";
+            break;
+        }
+        case PUBREL : {
+            ret = "PUBREL";
+            break;
+        }
+        case PUBCOMP : {
+            ret = "PUBCOMP";
+            break;
+        }
+        case SUBSCRIBE : {
+            ret = "SUBSCRIBE";
+            break;
+        }
+        case SUBACK : {
+            ret = "SUBACK";
+            break;
+        }
+        case UNSUBSCRIBE : {
+            ret = "UNSUBSCRIBE";
+            break;
+        }
+        case UNSUBACK : {
+            ret = "UNSUBACK";
+            break;
+        }
+        case PINGREQ : {
+            ret = "PINGREQ";
+            break;
+        }
+        case PINGRESP : {
+            ret = "PINGRESP";
+            break;
+        }
+        case DISCONNECT : {
+            ret = "DISCONNECT";
+            break;
+        }
+        default : {
+            JLOG_ERROR("unknow control packet type!");
+            break;
+        }
+    }
+    return ret;
+}
+
 /*
  * resolve server address
  * @param server the server sockaddress
@@ -386,8 +453,10 @@ static int MQTTPacket_readPacket(MQTTClient *c)
     int rem_len = 0;
 
     /* 1. read the header byte.  This has the packet type in it */
-    if (net_read(c, c->readbuf, 1, 0) != 1)
+    if (net_read(c, c->readbuf, 1, 0) != 1) {
+        JLOG_ERROR("read packet header type error");
         goto exit;
+    }
 
     len = 1;
     /* 2. read the remaining length.  This is variable in itself */
@@ -399,8 +468,10 @@ static int MQTTPacket_readPacket(MQTTClient *c)
         goto exit;
     }
     /* 3. read the rest of the buffer using a callback to supply the rest of the data */
-    if (rem_len > 0 && (net_read(c, c->readbuf + len, rem_len, rem_len + 1000) != rem_len))
+    if (rem_len > 0 && (net_read(c, c->readbuf + len, rem_len, rem_len + 1000) != rem_len)) {
+        JLOG_ERROR("read packet payload data error, len=%d", rem_len);
         goto exit;
+    }
 
     header.byte = c->readbuf[0];
     rc = header.bits.type;
@@ -652,6 +723,8 @@ static int MQTT_cycle(MQTTClient *c)
         rc = PAHO_FAILURE;
         goto exit;
     }
+    char *pt_string = strcpt(packet_type);
+    JLOG_VERBOSE("cycle packet_type: [%d] %s", packet_type, pt_string);
 
     switch (packet_type)
     {
@@ -911,8 +984,11 @@ _mqtt_start:
     uint32_t tick_now;
     fd_set readset;
     struct timeval timeout;
-    uint32_t ping_time;
-    // int ping_flag = 0;
+    uint32_t ping_time = 0;
+
+    // timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
 
     while (1)
     {
@@ -921,31 +997,32 @@ _mqtt_start:
 
         if (ping_time > (c->keepAliveInterval - 5))
         {
-            timeout.tv_sec = 5;
-            if (!c->ping_flag) {
-                c->ping_flag = 1;
-                JLOG_VERBOSE("tick close to ping, %d", ping_time);
+            if (c->ping_flag++ < 3) {
+                paho_mqtt_ping(c);
+                c->tick_ping += 5000;
+                // timeout.tv_sec = 5;
             } else {
-                JLOG_VERBOSE("continue to ping, %d", ping_time);
+                JLOG_ERROR("[%d] Ping timeout :%d, and disconnect", ping_time);
+                goto _mqtt_disconnect;
             }
-        }
-        else
-        {
+        } else {
             timeout.tv_sec = (c->keepAliveInterval - ping_time) / 2;
-            JLOG_VERBOSE("timeout for ping: %d, ping_time: %d\n", timeout.tv_sec, ping_time);
         }
-        timeout.tv_usec = 0;
 
         FD_ZERO(&readset);
         FD_SET(c->sock, &readset);
         FD_SET(c->pub_sock, &readset);
 
-        /* int select(maxfdp1, readset, writeset, exceptset, timeout); */
+        // /* int select(maxfdp1, readset, writeset, exceptset, timeout); */
         res = select(((c->pub_sock > c->sock) ? c->pub_sock : c->sock) + 1,
                           &readset, NULL, NULL, &timeout);
-        if (res == 0 && c->ping_flag)
+        // res = select(c->pub_sock + 1,
+        //                   &readset, NULL, NULL, &timeout);
+
+        if (res == 0)
         {
-            if (c->ping_flag++ < 5) {
+            /*
+            if (c->ping_flag++ < 25) {
                 len = MQTTSerialize_pingreq(c->buf, c->buf_size);
                 rc = sendPacket(c, len);
                 if (rc != 0)
@@ -971,8 +1048,8 @@ _mqtt_start:
                 // }
             } else {
                 JLOG_ERROR("Ping Response timeout res: %dS, %d, and disconnect", ping_time, c->ping_flag);
-                goto _mqtt_disconnect;
-            }
+                //goto _mqtt_disconnect;
+            }*/
         } /* res == 0: timeout for ping. */
 
         if (res < 0)
@@ -988,7 +1065,7 @@ _mqtt_start:
             JLOG_VERBOSE("sock FD_ISSET rc_t : %d\n", rc_t);
             if (rc_t < 0) {
                 // goto _mqtt_disconnect;
-                JLOG_ERROR("MQTT_cycle process failed");
+                JLOG_VERBOSE("MQTT_cycle process failed");
             }
 
             continue;
@@ -1026,6 +1103,24 @@ _mqtt_start:
                 {
                     JLOG_ERROR("DISCONNECT\n");
                     goto _mqtt_disconnect_exit;
+                } else if (strcmp((const char *)c->readbuf, "PING") == 0) {
+                    len = MQTTSerialize_pingreq(c->buf, c->buf_size);
+                    rc = sendPacket(c, len);
+                    if (rc != 0)
+                    {
+                        JLOG_ERROR("send ping error: %d, %d", c->tick_ping,  aos_now_ms());
+                        // goto _mqtt_disconnect;
+                    } else {
+                        JLOG_INFO("send ping and interval: %d", (aos_now_ms() - c->tick_ping) / 1000);
+                        // ping_flag = 0;
+                        // JLOG_VERBOSE("ping on running time: %ds\n", ping_time);
+                    }
+                } else if (strcmp((const char *)c->readbuf, "CYCLE") == 0) {
+                    rc_t = MQTT_cycle(c);
+                    if (rc_t < 0) {
+                        // goto _mqtt_disconnect;
+                        JLOG_ERROR("MQTT_cycle process failed");
+                    }
                 }
 
                 continue;
@@ -1134,6 +1229,15 @@ int paho_mqtt_stop(MQTTClient *client)
     return MQTT_CMD(client, "DISCONNECT");
 }
 
+int paho_mqtt_ping(MQTTClient *client)
+{
+    return MQTT_CMD(client, "PING");
+}
+
+int paho_mqtt_cycle(MQTTClient *client)
+{
+    return MQTT_CMD(client, "CYCLE");
+}
 /**
  * This function send an MQTT subscribe packet and wait for suback before returning.
  *
