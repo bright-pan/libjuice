@@ -207,7 +207,7 @@ static int dtls_srtp_selfsign_cert_with_ecdsa(dtls_srtp_t *dtls_srtp) {
     }
 
     mbedtls_x509_crt_parse(&dtls_srtp->cert, cert_buf, 2 * RSA_KEY_LENGTH);
-    // JLOG_INFO("%s", cert_buf);
+    JLOG_INFO("%s", cert_buf);
     mbedtls_x509write_crt_free(&crt);
 
     mbedtls_mpi_free(&serial);

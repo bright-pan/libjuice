@@ -82,6 +82,8 @@ source_file:
   - "src/rtp_list.c"
   - "src/thread.c"
   - "src/utils.c"
+  - "src/rtp_enc.c"
+  - "src/audio_demo.c"
   - "test/*.c"
 
 ## 第五部分：配置信息

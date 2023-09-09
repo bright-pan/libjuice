@@ -96,6 +96,8 @@ static void mqtt_sub_callback(MQTTClient *c, MessageData *msg_data)
                 if (sdp_string) {
                     JLOG_INFO("%s", sdp_string);
                     juice_set_remote_description(pc->juice_agent, sdp_string);
+                    // answer
+                    STATE_CHANGED(pc, PEER_CONNECTION_START);
                 }
             }
             if (strstr(cmd_type,"candidate")) {            

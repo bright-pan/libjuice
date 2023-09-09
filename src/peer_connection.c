@@ -11,6 +11,7 @@
 
 #include "peer_connection.h"
 #include "rtcp_packet.h"
+#include "rtp_enc.h"
 
 // #define STATE_CHANGED(pc, curr_state) if(pc->cb_state_change && pc->state != curr_state) { pc->cb_state_change(curr_state, pc->user_data); pc->state = curr_state; }
 
@@ -391,9 +392,6 @@ static void agent_on_gathering_done(juice_agent_t *agent, void *user_ptr) {
     // juice_get_local_description(pc->juice_agent, pc->local_sdp.content, JUICE_MAX_SDP_STRING_LEN);
     JLOG_INFO("%s gathering done:\n%s\n", pc->name, pc->local_sdp.content);
     juice_set_remote_gathering_done(agent); // optional
-
-    // answer
-    // STATE_CHANGED(pc, PEER_CONNECTION_START);
 }
 
 // Agent on message received
@@ -692,6 +690,9 @@ void *loop_thread_entry(void *param) {
         //          }
                     peer_connection_rtp_push_thread_init(pc, rtp_push_thread_entry);
                     STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
+                    rtp_enc_init(pc);
+                    rtp_enc_start(pc);
+                    rtp_dec_init(pc);
                 }
                 // if ((pc->juice_agent_ret = agent_recv(pc->juice_agent, pc->juice_agent_buf, sizeof(pc->juice_agent_buf))) > 0) {
                 //   JLOG_DEBUG("agent_recv %d", pc->juice_agent_ret);
