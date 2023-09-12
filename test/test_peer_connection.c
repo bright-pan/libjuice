@@ -8,6 +8,7 @@
 #if defined(AOS_COMP_CLI)
 #include <aos/cli.h>
 #include <aos/kernel.h>
+#include <lwip/stats.h>
 
 
 extern void mqtt_offer_publish(char *sdp_content);
@@ -56,6 +57,8 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
         JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
+        JLOG_ERROR("Usage: %s mem_stats\n", argv[0]);
+        JLOG_ERROR("Usage: %s memp_stats all/[0-%d]\n", argv[0], MEMP_MAX);
         return;
     }
 
@@ -189,6 +192,26 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         } else {
             JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
         }
+    } else if (strstr(argv[1], "mem_stats")) {
+        if (argc == 2) {
+            MEM_STATS_DISPLAY();
+            // JLOG_INFO("rtp_send_cache_list count:%d", rtp_list_count(&pc->rtp_send_cache_list));
+        } else {
+            JLOG_ERROR("Usage: %s mem_stats\n", argv[0]);
+        }
+    } else if (strstr(argv[1], "memp_stats")) {
+        if (argc == 3) {
+             if (strstr(argv[2], "all")) {
+                for (int i=0; i<MEMP_MAX; i++) {
+                    MEMP_STATS_DISPLAY(i);
+                }
+             } else {
+                MEMP_STATS_DISPLAY(atoi(argv[2]));
+             }
+            // JLOG_INFO("rtp_send_cache_list count:%d", rtp_list_count(&pc->rtp_send_cache_list));
+        } else {
+            JLOG_ERROR("Usage: %s memp_stats all/[0-%d]\n", argv[0], MEMP_MAX);
+        }
     } else {
         JLOG_ERROR("Usage: %s create|start|remote|pair\n", argv[0]);
         JLOG_ERROR("Usage: %s get local|remote\n", argv[0]);
@@ -200,6 +223,8 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
         JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
+        JLOG_ERROR("Usage: %s mem_stats\n", argv[0]);
+        JLOG_ERROR("Usage: %s memp_stats all/[0-%d]\n", argv[0], MEMP_MAX);
     }
 }
 

@@ -35,17 +35,17 @@
 #define PCM_CAPTURE_DEVICE_STREAM AOS_PCM_STREAM_CAPTURE
 
 #define PCM_CAPTURE_HW_PARAMS_DIR 1
-#define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH 16 // 16bit depth
-#define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE (PCM_CAPTURE_HW_PARAMS_BIT_DEPTH / 8) // 16bit / 8 = 2bytes
-#define PCM_CAPTURE_HW_PARAMS_CHANNEL 2
-#define PCM_CAPTURE_HW_PARAMS_RATE 8000
-#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE 320// 25fps(40ms/packet) i2s rx period size
-#define PCM_CAPTURE_HW_PARAMS_PERIOD_BYTES (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE * PCM_CAPTURE_HW_PARAMS_CHANNEL)
-#define PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * 2) // i2s rx buffer size
-#define PCM_CAPTURE_HW_PARAMS_BUFFER_BYTES (PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE * PCM_CAPTURE_HW_PARAMS_CHANNEL)
+#define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH 16 // sample depth
+#define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES (PCM_CAPTURE_HW_PARAMS_BIT_DEPTH / 8) // sample depth bytes
+#define PCM_CAPTURE_HW_PARAMS_CHANNEL 2 // sample channel
+#define PCM_CAPTURE_HW_PARAMS_RATE 8000 // sample rate
+#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE 320// 25fps(40ms/packet) sample window size
+#define PCM_CAPTURE_HW_PARAMS_PERIOD_BYTES (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES * PCM_CAPTURE_HW_PARAMS_CHANNEL)
+#define PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * 2) // sample window buffer size
+#define PCM_CAPTURE_HW_PARAMS_BUFFER_BYTES (PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES * PCM_CAPTURE_HW_PARAMS_CHANNEL)
 
 #define CVIAUDIO_CHANNEL PCM_CAPTURE_HW_PARAMS_CHANNEL
-#define CVIAUDIO_PER_SAMPLE PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE
+#define CVIAUDIO_PER_SAMPLE PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES
 #define CVIAUDIO_AEC_LENGTH 160
 
 
@@ -55,14 +55,14 @@
 #define RTP_AUDIO_DEC_PERIOD_SIZE 160
 
 #define PCM_PLAY_HW_PARAMS_DIR 0
-#define PCM_PLAY_HW_PARAMS_BIT_DEPTH 16 // 16bit depth
-#define PCM_PLAY_HW_PARAMS_BIT_DEPTH_SIZE (PCM_PLAY_HW_PARAMS_BIT_DEPTH / 8) // 16bit / 8 = 2bytes
+#define PCM_PLAY_HW_PARAMS_BIT_DEPTH 16 // play depth
+#define PCM_PLAY_HW_PARAMS_BIT_DEPTH_BYTES (PCM_PLAY_HW_PARAMS_BIT_DEPTH / 8) // play depth bytes
 #define PCM_PLAY_HW_PARAMS_CHANNEL 1
 #define PCM_PLAY_HW_PARAMS_RATE 8000
-#define PCM_PLAY_HW_PARAMS_PERIOD_SIZE 1280 // 10fps(100ms/packet) i2s tx period size
-#define PCM_PLAY_HW_PARAMS_PERIOD_BYTES (PCM_PLAY_HW_PARAMS_PERIOD_SIZE * PCM_PLAY_HW_PARAMS_BIT_DEPTH_SIZE * PCM_PLAY_HW_PARAMS_CHANNEL)
-#define PCM_PLAY_HW_PARAMS_BUFFER_SIZE (PCM_PLAY_HW_PARAMS_PERIOD_SIZE * 2) // i2s tx buffer size
-#define PCM_PLAY_HW_PARAMS_BUFFER_BYTES (PCM_PLAY_HW_PARAMS_BUFFER_SIZE * PCM_PLAY_HW_PARAMS_BIT_DEPTH_SIZE * PCM_PLAY_HW_PARAMS_CHANNEL)
+#define PCM_PLAY_HW_PARAMS_PERIOD_SIZE 1280 // 10fps(100ms/packet) play window size
+#define PCM_PLAY_HW_PARAMS_PERIOD_BYTES (PCM_PLAY_HW_PARAMS_PERIOD_SIZE * PCM_PLAY_HW_PARAMS_BIT_DEPTH_BYTES * PCM_PLAY_HW_PARAMS_CHANNEL)
+#define PCM_PLAY_HW_PARAMS_BUFFER_SIZE (PCM_PLAY_HW_PARAMS_PERIOD_SIZE * 2) // play window buuffer size
+#define PCM_PLAY_HW_PARAMS_BUFFER_BYTES (PCM_PLAY_HW_PARAMS_BUFFER_SIZE * PCM_PLAY_HW_PARAMS_BIT_DEPTH_BYTES * PCM_PLAY_HW_PARAMS_CHANNEL)
 
 #define RTP_AUDIO_DEC_PERIOD_PACKET_SIZE (PCM_PLAY_HW_PARAMS_PERIOD_SIZE / RTP_AUDIO_DEC_PERIOD_SIZE)
 
@@ -427,6 +427,47 @@ static void audio_3a_process(audio_t *audio, char *pMicIn,int frameSize ,char *p
     }
 }
 
+static void rtp_packet_video(char *packet, int bytes, void *user_data) {
+    int ret;
+    peer_connection_t *pc = user_data;
+    ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
+    // JLOG_INFO("add rtp frame[%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
+    // send data
+    if (ret == srtp_err_status_ok) {
+        if (juice_send(pc->juice_agent, packet, bytes) == JUICE_ERR_SUCCESS) {
+            rtp_header_t *pheader = (rtp_header_t *)packet;
+            rtp_list_wlock(&pc->rtp_send_cache_list);
+            rtp_frame_t *frame = rtp_frame_malloc(ntohl(pheader->ssrc), ntohs(pheader->seq_number), packet, bytes);
+            if (frame) {
+                // insert into rtp cache list
+                if (rtp_list_insert(&pc->rtp_send_cache_list, frame) < 0) {
+                    JLOG_ERROR("rtp_list_insert error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
+                    rtp_frame_free(frame);
+                }
+            } else {
+                JLOG_ERROR("rtp_frame_malloc error!");
+            }
+            rtp_list_unlock(&pc->rtp_send_cache_list);
+        } else {
+            JLOG_ERROR("juice_send error");
+        }
+    } else {
+        JLOG_ERROR("srtp_encrypt error");
+    }
+}
+
+static void rtp_packet_audio(char *packet, int bytes, void *user_data) {
+    int ret;
+    peer_connection_t *pc = user_data;
+    ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
+    if (ret == srtp_err_status_ok) {
+        juice_send(pc->juice_agent, packet, bytes);
+    } else {
+        JLOG_ERROR("srtp_encrypt error");
+    }
+}
+
+
 static void *rtp_video_enc_thread_entry(void *param) {
     peer_connection_t *pc = param;
     VENC_STREAM_S venc_stream = {0};
@@ -441,39 +482,17 @@ static void *rtp_video_enc_thread_entry(void *param) {
         uint32_t now_timestamp = aos_now_ms();
         rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
                             now_timestamp,
-                            peer_connection_set_cb_rtp_packet, pc);
+                            rtp_packet_video, pc);
     }
 
     while (1) {
-        // flags = rtmp_event_get(RTMP_EVENT_MASK);
         if (pc->rtp_audio_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
-            // JLOG_INFO("venc get stream------------------");
             if(MEDIA_VIDEO_VencGetStream(0, &venc_stream, 2000) == CVI_SUCCESS) {
-                //parse sps pps
-                // JLOG_INFO("venc get stream");
-                // venc_process_stream(pc, &venc_stream);
-
                 //pack proc
                 for(iPackid = 0; iPackid < venc_stream.u32PackCount; iPackid++ )
                 {
                     pPack = &venc_stream.pstPack[iPackid];
-                    // peer_connection_send_video(pc, pPack->pu8Addr, pPack->u32Len);
-
-                    rtp_list_wlock(&pc->rtp_send_cache_list);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
-                    rtp_list_unlock(&pc->rtp_send_cache_list);
-                    //send fifo
-                    // while (1) {
-                    //     recv_count = packet_fifo_read(&pc->video_fifo, buf, 4096);
-                    //     if (recv_count > 0) {
-                    //         // JLOG_INFO_DUMP_HEX(buf, recv_count);
-                    //         ret = peer_connection_send_rtp_packet(pc, buf, recv_count);
-                    //         // JLOG_INFO("send rtp[%d], ret=%d", recv_count, ret);
-                    //     } else {
-                    //         // no data
-                    //         break;
-                    //     }
-                    // }
                 }
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             } else {
@@ -503,7 +522,7 @@ static void *rtp_audio_enc_thread_entry(void *param) {
         uint32_t now_timestamp = aos_now_ms();
         rtp_packetizer_init(&pc->audio_packetizer, pc->options.audio_codec,
                             now_timestamp,
-                            peer_connection_set_cb_rtp_packet, pc);
+                            rtp_packet_audio, pc);
     }
 
     while (1) {
@@ -518,10 +537,10 @@ static void *rtp_audio_enc_thread_entry(void *param) {
                 audio_3a_process(audio, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
                 audio_stereo2mono(audio, (short *)pcm_capture_buffer, (short *)pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, MIC_AUDIO_LEFT);
                 // pcm -> g711-alaw, 16bit to 8bit, mono channel
-                pcm16_to_alaw(PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_SIZE, pcm_capture_enc_buffer, pcm_capture_buffer);
-                rtp_list_wlock(&pc->rtp_send_cache_list);
+                pcm16_to_alaw(PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES, pcm_capture_enc_buffer, pcm_capture_buffer);
+                // rtp_list_wlock(&pc->rtp_send_cache_list);
                 rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
-                rtp_list_unlock(&pc->rtp_send_cache_list);
+                // rtp_list_unlock(&pc->rtp_send_cache_list);
                 // int buffer_size = ret * pcm->channel * (pcm->bit_depth / 8);
                 // JLOG_INFO_DUMP_HEX(pcm_capture_buffer, buffer_size, "pcm_capture_buffer: read_size=%d, buffer_size=%d", ret, buffer_size);
             } else {
@@ -543,7 +562,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
     audio_t *audio = &audio_play;
     rtp_packet_t *rtp_packet;
     int rtp_payload_len = 0;
-    int pcm_play_period_size = 0;
+    int pcm_play_period_size = 0; // play window size
     char pcm_play_buffer[PCM_PLAY_HW_PARAMS_PERIOD_BYTES];
 
     thread_set_name_self("rtp_audio_dec");
@@ -561,6 +580,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
                     rtp_packet = (rtp_packet_t *)frame->packet;
                     if (rtp_packet->header.type == RTP_PAYLOAD_TYPE_PCMA) {
                         rtp_payload_len = frame->bytes - sizeof(rtp_packet_t);
+                        // decode g711a to pcm16
                         alaw_to_pcm16(rtp_payload_len, (char *)rtp_packet->payload, pcm_play_buffer + pcm_play_period_size * 2);
                         if (pcm_play_period_size + rtp_payload_len >= PCM_PLAY_HW_PARAMS_PERIOD_SIZE) {
                             pcm_play_period_size = 0;

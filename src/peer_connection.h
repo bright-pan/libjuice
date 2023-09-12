@@ -194,8 +194,6 @@ void peer_connection_set_current_ip(const char *ip);
 
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end);
 
-void peer_connection_set_cb_rtp_packet(char *packet, int bytes, void *user_data);
-
 // void peer_connection_reset_video_fifo(peer_connection_t *pc);
 #ifdef __cplusplus
 }
