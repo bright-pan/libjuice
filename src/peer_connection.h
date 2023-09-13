@@ -82,6 +82,7 @@ typedef struct peer_connect {
 
     rtp_list_t rtp_send_cache_list; // has been sended frame cache list
     rtp_list_t rtp_recv_cache_list; // has been sended frame cache list
+    rtp_list_t rtp_recv_process_list; // has been sended frame cache list
 
     thread_t loop_thread; // thread handle
     int loop_thread_ssize; // stack size

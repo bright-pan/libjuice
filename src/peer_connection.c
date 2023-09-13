@@ -33,12 +33,8 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
     rtp_list_rlock(&pc->rtp_send_cache_list);
     rtp_frame_t *frame = rtp_list_find_by_key(&pc->rtp_send_cache_list, key);
     if (frame) {
-        // JLOG_INFO("resend key[%d:%d]:%d", key.ssrc, key.seq, frame->bytes);
-        // frame->timeout_count--;
-        if (juice_send(pc->juice_agent, frame->packet, frame->bytes) == JUICE_ERR_SUCCESS) {
-            //rtp_list_delete(&pc->rtp_send_cache_list, frame);
-            ret = frame->bytes;
-        }
+        juice_send(pc->juice_agent, frame->packet, frame->bytes);
+        ret = frame->bytes;
     } else {
         JLOG_ERROR("resend key[%d:%d] is not found!", key.ssrc, key.seq);
         // rtp_list_print_all(&pc->rtp_send_cache_list, 0);
@@ -178,10 +174,7 @@ static void *rtp_push_thread_entry(void *args)
     while (1) {
         rtp_list_wlock(&pc->rtp_send_cache_list);
         HASH_ITER(hh, pc->rtp_send_cache_list.utlist, frame, tmp) {
-            if (frame->send_flag++ == 0) {
-                juice_send(pc->juice_agent, frame->packet, frame->bytes);
-            }
-            if (frame->type == RTP_PAYLOAD_TYPE_PCMA || frame->timeout_count-- <= 0) {
+            if (frame->timeout_count-- <= 0) {
                 rtp_list_delete(&pc->rtp_send_cache_list, frame);
             }
         }
@@ -316,46 +309,53 @@ static void agent_on_gathering_done(juice_agent_t *agent, void *user_ptr) {
     juice_set_remote_gathering_done(agent); // optional
 }
 
+static void rtp_recv_packet_process(peer_connection_t *pc, char *packet, int bytes) {
+    int ret;
+    // JLOG_INFO( "%s recv rtp: %ld", pc->name, size);
+    if (rtcp_packet_validate((uint8_t *)packet, bytes)) {
+        ret = dtls_srtp_decrypt_rtcp_packet(&pc->dtls_srtp, packet, &bytes);
+        if (ret == srtp_err_status_ok) {
+            // JLOG_INFO("rtcp packet[%d]:", bytes);
+            // JLOG_INFO_DUMP_HEX(packet, bytes);
+            peer_connection_incoming_rtcp(pc, (uint8_t *)packet, bytes);
+        } else {
+            JLOG_INFO_DUMP_HEX(packet, bytes, "--------------invalid[%d] rtcp packet[%d]---------------", ret, bytes);
+        }
+    } else {
+        ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, packet, &bytes);
+        if (ret == srtp_err_status_ok) {
+            // rtp_list_wlock(&pc->rtp_recv_cache_list);
+            ret = rtp_list_insert_packet(&pc->rtp_recv_cache_list, packet, bytes);
+            if (ret < 0) {
+                // JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
+            }
+            // rtp_list_unlock(&pc->rtp_recv_cache_list);
+        } else {
+            JLOG_INFO_DUMP_HEX(packet, bytes, "--------------invalid[%d] rtp packet[%d]---------------", ret, bytes);
+        }
+    }
+}
+
 // Agent on message received
 static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, void *user_ptr) {
-    char buf[4096];
     int ret;
-    int bytes = size;
     peer_connection_t *pc = user_ptr;
-    memcpy(buf, data, size);
-    if((buf[0]>=128) && (buf[0]<=191)) {
-        // JLOG_INFO( "%s recv rtp: %ld", pc->name, size);
-        if (rtcp_packet_validate((uint8_t *)buf, bytes)) {
-            ret = dtls_srtp_decrypt_rtcp_packet(&pc->dtls_srtp, buf, &bytes);
-            if (ret == srtp_err_status_ok) {
-                // JLOG_INFO("rtcp packet[%d]:", bytes);
-                // JLOG_INFO_DUMP_HEX(buf, bytes);
-                peer_connection_incoming_rtcp(pc, (uint8_t *)buf, bytes);
-            } else {
-                JLOG_INFO_DUMP_HEX(data, size, "--------------invalid[%d] rtcp packet[%d]---------------", ret, bytes);
-            }
-        } else {
-            ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, buf, &bytes);
-            if (ret == srtp_err_status_ok) {
-                rtp_list_wlock(&pc->rtp_recv_cache_list);
-                ret = rtp_list_insert_packet(&pc->rtp_recv_cache_list, buf, bytes);
-                if (ret < 0) {
-                    // JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
-                }
-                rtp_list_unlock(&pc->rtp_recv_cache_list);
-            } else {
-                JLOG_INFO_DUMP_HEX(data, size, "--------------invalid[%d] rtp packet[%d]---------------", ret, bytes);
-            }
+    if((data[0]>=128) && (data[0]<=191)) {
+        // rtp_list_wlock(&pc->rtp_recv_process_list);
+        ret = rtp_list_insert_packet(&pc->rtp_recv_process_list, (char *)data, size);
+        if (ret < 0) {
+            // JLOG_ERROR("rtp_recv_process_list error, count:%d", rtp_list_count(&pc->rtp_recv_process_list));
         }
+        // rtp_list_unlock(&pc->rtp_recv_process_list);
         return;
     }
-    if((buf[0]>=20)  && (buf[0]<=64)) {
+    if((data[0]>=20)  && (data[0]<=64)) {
         // JLOG_INFO( "%s recv dtls: %ld", pc->name, size);
-        packet_fifo_write(&pc->dtls_fifo, buf, bytes);
+        packet_fifo_write(&pc->dtls_fifo, (char *)data, size);
         return;
     }
 
-    JLOG_INFO( "%s recv other: %ld", pc->name, bytes);
+    JLOG_INFO( "%s recv other: %ld", pc->name, size);
 }
 
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end) {
@@ -403,18 +403,18 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     // rtp push
     pc->rtp_push_thread = NULL;
     pc->rtp_push_thread_ssize = 32*1024;
-    pc->rtp_push_thread_prio = THREAD_DEFAULT_PRIORITY - 1;
+    pc->rtp_push_thread_prio = THREAD_DEFAULT_PRIORITY + 1;
 
     // rtp video encode
     pc->rtp_video_enc_thread = NULL;
     pc->rtp_video_enc_loop_flag = 0;
-    pc->rtp_video_enc_thread_ssize = 16*1024;
+    pc->rtp_video_enc_thread_ssize = 32*1024;
     pc->rtp_video_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
 
     // rtp audio encode
     pc->rtp_audio_enc_thread = NULL;
     pc->rtp_audio_enc_loop_flag = 0;
-    pc->rtp_audio_enc_thread_ssize = 16*1024;
+    pc->rtp_audio_enc_thread_ssize = 32*1024;
     pc->rtp_audio_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
 
     // rtp audio decode
@@ -511,6 +511,7 @@ static void peer_connection_state_start(peer_connection_t *pc) {
 
     packet_fifo_reset(&pc->dtls_fifo);
 
+    rtp_list_init(&pc->rtp_recv_process_list);
     rtp_list_init(&pc->rtp_send_cache_list);
     rtp_list_init(&pc->rtp_recv_cache_list);
 
@@ -522,6 +523,8 @@ void *loop_thread_entry(void *param) {
 //   memset(pc->juice_agent_buf, 0, sizeof(pc->juice_agent_buf));
 //   pc->juice_agent_ret = -1;
     int ret;
+    rtp_frame_t *frame;
+    rtp_frame_t *tmp;
     peer_connection_t *pc = (peer_connection_t *)param;
 
     thread_set_name_self(pc->name);
@@ -551,89 +554,37 @@ void *loop_thread_entry(void *param) {
                 }
                 break;
             }
-            case PEER_CONNECTION_HANDSHAKE:
-            if (pc->dtls_srtp.state == DTLS_SRTP_STATE_INIT) {
-                //juice_suspend(pc->juice_agent);
-                JLOG_INFO("DTLS-SRTP %s handshake start", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
-                if (dtls_srtp_handshake(&pc->dtls_srtp, &pc->remote_cand.resolved) == 0) {
-
-                JLOG_INFO("DTLS-SRTP %s handshake done", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
-        #ifdef HAVE_GST
-                if (pc->audio_stream) {
-                    media_stream_play(pc->audio_stream);
-                }
-
-                if (pc->video_stream) {
-                    media_stream_play(pc->video_stream);
-                }
-        #endif
-
-                  if (pc->options.datachannel) {
-                    JLOG_INFO("SCTP create socket");
-                //     pc->sctp.data_rb = pc->data_rb;
-                    sctp_create_socket(&pc->sctp, &pc->dtls_srtp);
-                  }
-
-                }
-            } else if (pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
-                    //juice_resume(pc->juice_agent);
-        //         uint16_t bytes;
-
-        //         if (utils_buffer_pop(pc->audio_rb[0], (uint8_t*)&bytes, sizeof(bytes)) > 0) {
-        //           if (utils_buffer_pop(pc->audio_rb[1], pc->juice_agent_buf, bytes) > 0) {
-        //             peer_connection_send_rtp_packet(pc, pc->juice_agent_buf, bytes);
-        //           }
-        //         }
-        
-        //         if (utils_buffer_pop(pc->video_rb[0], (uint8_t*)&bytes, sizeof(bytes)) > 0) {
-        //           if (utils_buffer_pop(pc->video_rb[1], pc->juice_agent_buf, bytes) > 0) {
-        //             peer_connection_send_rtp_packet(pc, pc->juice_agent_buf, bytes);
-        // 	  }
-        //         }
-        //         if (utils_buffer_pop(pc->data_rb[0], (uint8_t*)&bytes, sizeof(bytes)) > 0) {
-        //           if (utils_buffer_pop(pc->data_rb[1], pc->juice_agent_buf, bytes) > 0) {
-        // #if 0
-        //   JLOG_INFO("send data: %d\t", bytes);
-        //   for (int i = 0; i < 24; ++i) {
-        //     JLOG_INFO("%02x ", pc->juice_agent_buf[i]);
-        //   }
-        //   JLOG_INFO("\n");
-        // #endif
-
-        //             dtls_srtp_write(&pc->dtls_srtp, pc->juice_agent_buf, bytes);
-        //          }
+            case PEER_CONNECTION_HANDSHAKE: {
+                if (pc->dtls_srtp.state == DTLS_SRTP_STATE_INIT) {
+                    //juice_suspend(pc->juice_agent);
+                    JLOG_INFO("DTLS-SRTP %s handshake start", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
+                    if (dtls_srtp_handshake(&pc->dtls_srtp, &pc->remote_cand.resolved) == 0) {
+                        JLOG_INFO("DTLS-SRTP %s handshake done", pc->dtls_srtp.role == DTLS_SRTP_ROLE_SERVER ? "server" : "client");
+                        if (pc->options.datachannel) {
+                            JLOG_INFO("SCTP create socket");
+                            sctp_create_socket(&pc->sctp, &pc->dtls_srtp);
+                        }
+                    }
+                } else if (pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
                     peer_connection_rtp_push_thread_init(pc, rtp_push_thread_entry);
                     STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
                     rtp_enc_init(pc);
                     rtp_enc_start(pc);
                     rtp_dec_init(pc);
                 }
-                // if ((pc->juice_agent_ret = agent_recv(pc->juice_agent, pc->juice_agent_buf, sizeof(pc->juice_agent_buf))) > 0) {
-                //   JLOG_DEBUG("agent_recv %d", pc->juice_agent_ret);
-
-                //   if (rtcp_packet_validate(pc->juice_agent_buf, pc->juice_agent_ret)) {
-                //     JLOG_DEBUG("Got RTCP packet");
-                //     dtls_srtp_decrypt_rtcp_packet(&pc->dtls_srtp, pc->juice_agent_buf, pc->juice_agent_ret);
-                //     peer_connection_incoming_rtcp(pc, pc->juice_agent_buf, pc->juice_agent_ret);
-
-                //   } else if (dtls_srtp_validate(pc->juice_agent_buf)) {
-
-                //     int ret = dtls_srtp_read(&pc->dtls_srtp, pc->temp_buf, sizeof(pc->temp_buf));
-                //     JLOG_DEBUG("Got DTLS data %d", ret);
-
-                //     if (ret > 0) {
-                //       sctp_incoming_data(&pc->sctp, (char*)pc->temp_buf, ret);
-                //     }
-
-                //   } else if (rtp_packet_validate(pc->juice_agent_buf, pc->juice_agent_ret)) {
-                //     JLOG_DEBUG("Got RTP packet");
-
-                //   }
-
-                // }
-            //   }
-            break;
+                break;
+            }
             case PEER_CONNECTION_COMPLETED: {
+                if (rtp_list_count(&pc->rtp_recv_process_list) > 0) {
+                    // rtp_list_wlock(&pc->rtp_recv_process_list);
+                    HASH_ITER(hh, pc->rtp_recv_process_list.utlist, frame, tmp) {
+                        // process rtp packet
+                        rtp_recv_packet_process(pc, frame->packet, frame->bytes);
+                        // remove frame
+                        rtp_list_delete(&pc->rtp_recv_process_list, frame);
+                    }
+                    // rtp_list_unlock(&pc->rtp_recv_process_list);
+                }
                 //recv fifo
                 char buf[4096];
                 int recv_count;

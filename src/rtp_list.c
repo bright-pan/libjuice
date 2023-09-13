@@ -14,7 +14,7 @@ static int by_bytes(const rtp_frame_t *a, const rtp_frame_t *b)
     return (a->bytes - b->bytes);
 }
 
-rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, const char *packet, int bytes) {
+rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, int bytes) {
     rtp_frame_t *frame = NULL;
 
     frame = (rtp_frame_t *)uthash_malloc(sizeof(rtp_frame_t));
@@ -43,7 +43,7 @@ void rtp_frame_free(rtp_frame_t *frame) {
     }
 }
 
-int rtp_list_insert_packet(rtp_list_t *insert_list, char *packet, int bytes) {
+int rtp_list_insert_packet(rtp_list_t *insert_list, void *packet, int bytes) {
     int ret = -1;
     rtp_header_t *pheader = (rtp_header_t *)packet;
     rtp_frame_t *frame = rtp_frame_malloc(pheader->type, ntohl(pheader->ssrc), ntohs(pheader->seq_number), packet, bytes);

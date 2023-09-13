@@ -21,8 +21,6 @@
 #define uthash_malloc(sz) juice_malloc(sz)
 #define uthash_free(ptr, sz) juice_free(ptr)
 
-#define RTP_LIST_MAX_SIZE 512
-
 typedef struct {
     int seq;
     uint32_t ssrc;
@@ -43,7 +41,7 @@ typedef struct {
     rwlock_t rwlock;
 } rtp_list_t;
 
-rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, const char *packet, int bytes);
+rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, int bytes);
 void rtp_frame_free(rtp_frame_t *frame);
 
 void rtp_list_init(rtp_list_t *rtp_list);
@@ -53,7 +51,7 @@ void rtp_list_unlock(rtp_list_t *rtp_list);
 
 int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size);
 #define rtp_list_insert(list, frame) rtp_list_insert_ex(list, frame, RTP_LIST_MAX_SIZE)
-int rtp_list_insert_packet(rtp_list_t *insert_list, char *packet, int bytes);
+int rtp_list_insert_packet(rtp_list_t *insert_list, void *packet, int bytes);
 void rtp_list_pop(rtp_list_t *rtp_list, rtp_frame_t *frame);
 rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key);
 void rtp_list_delete(rtp_list_t *rtp_list, rtp_frame_t *frame);

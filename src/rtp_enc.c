@@ -427,15 +427,18 @@ static void audio_3a_process(audio_t *audio, char *pMicIn,int frameSize ,char *p
     }
 }
 
-static void rtp_packetizer_callback(char *packet, int bytes, void *user_data) {
+static void rtp_enc_packetizer_callback(char *packet, int bytes, void *user_data) {
     int ret;
     peer_connection_t *pc = user_data;
     ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
     // JLOG_INFO("add rtp frame[%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
     if (ret == srtp_err_status_ok) {
-        ret = rtp_list_insert_packet(&pc->rtp_send_cache_list, packet, bytes);
-        if (ret < 0) {
-            JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
+        juice_send(pc->juice_agent, packet, bytes);
+        if (((rtp_header_t *)packet)->type == RTP_PAYLOAD_TYPE_H264) {
+            ret = rtp_list_insert_packet(&pc->rtp_send_cache_list, packet, bytes);
+            if (ret < 0) {
+                JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
+            }
         }
     } else {
         JLOG_ERROR("srtp_encrypt error");
@@ -455,7 +458,7 @@ static void *rtp_video_enc_thread_entry(void *param) {
     if (pc->options.video_codec) {
         uint32_t now_timestamp = aos_now_ms();
         rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
-                            now_timestamp, rtp_packetizer_callback, pc);
+                            now_timestamp, rtp_enc_packetizer_callback, pc);
     }
 
     while (1) {
@@ -496,7 +499,7 @@ static void *rtp_audio_enc_thread_entry(void *param) {
     if (pc->options.audio_codec) {
         uint32_t now_timestamp = aos_now_ms();
         rtp_packetizer_init(&pc->audio_packetizer, pc->options.audio_codec,
-                            now_timestamp,  rtp_packetizer_callback, pc);
+                            now_timestamp, rtp_enc_packetizer_callback, pc);
     }
 
     while (1) {
@@ -548,7 +551,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
     while (1) {
         if (pc->rtp_audio_dec_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             if (rtp_list_count(&pc->rtp_recv_cache_list) >= RTP_AUDIO_DEC_PERIOD_PACKET_SIZE) {
-                rtp_list_wlock(&pc->rtp_recv_cache_list);
+                // rtp_list_wlock(&pc->rtp_recv_cache_list);
                 HASH_ITER(hh, pc->rtp_recv_cache_list.utlist, frame, tmp) {
                     // process rtp packet
                     rtp_packet = (rtp_packet_t *)frame->packet;
@@ -576,7 +579,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
                     // remove frame
                     rtp_list_delete(&pc->rtp_recv_cache_list, frame);
                 }
-                rtp_list_unlock(&pc->rtp_recv_cache_list);
+                // rtp_list_unlock(&pc->rtp_recv_cache_list);
             } else {
                 usleep(RTP_AUDIO_DEC_INTERVAL*1000);
             }
