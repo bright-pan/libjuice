@@ -6,9 +6,11 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #include <aos/kernel.h>
 #include <sys/time.h>
+#include <time.h>
 
 
 #include <lwip/netdb.h>
@@ -17,6 +19,7 @@
 #include <lwip/sys.h>
 #include <lwip/netifapi.h>
 #include <MQTTPacket.h>
+
 #include "paho_mqtt.h"
 #include "utils.h"
 #include "log.h"
@@ -104,6 +107,18 @@ static char *strcpt(int cpt) {
     }
     return ret;
 }
+
+uint64_t clock_now_ms(void) {
+    uint64_t time_ms = 0;
+    struct timespec tp;
+
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    time_ms += tp.tv_sec * 1000;
+    time_ms += tp.tv_nsec / 1000000;
+
+    return time_ms;
+}
+
 
 /*
  * resolve server address
@@ -302,9 +317,9 @@ static int net_disconnect_exit(MQTTClient *c)
         juice_free(c->readbuf);
     }
 
-    if (aos_sem_is_valid(&c->pub_sem))
+    if (sem_is_valid(&c->pub_sem))
     {
-        aos_sem_free(&c->pub_sem);
+        sem_destroy(&c->pub_sem);
     }
 
     if (c->pub_sock >= 0)
@@ -785,7 +800,7 @@ static int MQTT_cycle(MQTTClient *c)
     case PUBCOMP:
         break;
     case PINGRESP:
-        c->tick_ping = aos_now_ms();
+        c->tick_ping = clock_now_ms();
         c->ping_flag = 0;
         break;
     }
@@ -898,11 +913,14 @@ exit:
     return rc;
 }
 
-static void paho_mqtt_thread(void *param)
+static void *paho_mqtt_thread(void *param)
 {
     MQTTClient *c = (MQTTClient *)param;
     int i, rc, len;
     int rc_t = 0;
+
+
+    thread_set_name_self(c->client_thread_name);
 
     c->pub_sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (c->pub_sock == -1)
@@ -977,7 +995,7 @@ _mqtt_start:
         c->online_callback(c);
     }
 
-    c->tick_ping = aos_now_ms();
+    c->tick_ping = clock_now_ms();
     c->ping_flag = 0;
 
     int res;
@@ -992,7 +1010,7 @@ _mqtt_start:
 
     while (1)
     {
-        tick_now = aos_now_ms();
+        tick_now = clock_now_ms();
         ping_time = (tick_now - c->tick_ping) / 1000;
 
         if (ping_time > (c->keepAliveInterval - 5))
@@ -1027,7 +1045,7 @@ _mqtt_start:
                 rc = sendPacket(c, len);
                 if (rc != 0)
                 {
-                    JLOG_ERROR("[%d] send ping rc: %d \n", aos_now_ms(), rc);
+                    JLOG_ERROR("[%d] send ping rc: %d \n", clock_now_ms(), rc);
                     // goto _mqtt_disconnect;
                 } else {
                     // ping_flag = 0;
@@ -1043,7 +1061,7 @@ _mqtt_start:
                 // res = select(c->sock + 1, &readset, NULL, NULL, &timeout);
                 // if (res <= 0)
                 // {
-                //     JLOG_ERROR("[%d] Ping Response timeout res: %d, and disconnect", aos_now_ms(), res);
+                //     JLOG_ERROR("[%d] Ping Response timeout res: %d, and disconnect", clock_now_ms(), res);
                 //     goto _mqtt_disconnect;
                 // }
             } else {
@@ -1108,10 +1126,10 @@ _mqtt_start:
                     rc = sendPacket(c, len);
                     if (rc != 0)
                     {
-                        JLOG_ERROR("send ping error: %d, %d", c->tick_ping,  aos_now_ms());
+                        JLOG_ERROR("send ping error: %d, %d", c->tick_ping,  clock_now_ms());
                         // goto _mqtt_disconnect;
                     } else {
-                        JLOG_INFO("send ping and interval: %d", (aos_now_ms() - c->tick_ping) / 1000);
+                        JLOG_INFO("send ping and interval: %d", (clock_now_ms() - c->tick_ping) / 1000);
                         // ping_flag = 0;
                         // JLOG_VERBOSE("ping on running time: %ds\n", ping_time);
                     }
@@ -1145,9 +1163,9 @@ _mqtt_start:
                 JLOG_ERROR_DUMP_HEX((unsigned char *)message->payload, message->payloadlen, "sendPacket %s failed, %d", topic.cstring, rc);
                 // goto _mqtt_disconnect;
             }
-            if (c->isblocking && aos_sem_is_valid(&c->pub_sem))
+            if (c->isblocking && sem_is_valid(&c->pub_sem))
             {
-                aos_sem_free(&c->pub_sem);
+                sem_destroy(&c->pub_sem);
             }
         } /* pbulish sock handler. */
     } /* while (1) */
@@ -1162,7 +1180,7 @@ _mqtt_restart:
     }
 
     net_disconnect(c);
-    aos_msleep(c->reconnect_interval > 0 ? c->reconnect_interval * 1000 : 1000 * 5);
+    usleep((c->reconnect_interval > 0 ? c->reconnect_interval * 1000 : 1000 * 5) * 1000);
     JLOG_ERROR("MQTT restart!\n");
     goto _mqtt_start;
 
@@ -1173,7 +1191,8 @@ _mqtt_disconnect_exit:
 _mqtt_exit:
     JLOG_ERROR("MQTT server is disconnected.");
 
-    return;
+    pthread_exit(&rc);
+    return NULL;
 }
 
 /**
@@ -1186,8 +1205,14 @@ _mqtt_exit:
 int paho_mqtt_start(MQTTClient *client)
 {
     int ret;
+    thread_attr_t attr;
     static uint8_t counts = 0;
-    static char thread_name[64];
+
+    client->client_thread_name = MQTT_THREAD_NAME;
+    client->client_thread_prio = MQTT_THREAD_PRIORITY;
+    client->client_thread_ssize = MQTT_THREAD_STACK_SIZE;
+
+    // static char client_thread_name[64];
     if (client->buf_size > 0 && client->readbuf_size > 0) {
         client->buf = juice_calloc(1, client->buf_size);
         client->readbuf = juice_calloc(1, client->readbuf_size);
@@ -1196,19 +1221,19 @@ int paho_mqtt_start(MQTTClient *client)
             return PAHO_FAILURE;
         }
     }
+
     /* create publish mutex */
-    ret = aos_sem_new(&client->pub_sem, 1);
+    ret = sem_init(&client->pub_sem, 0, 1);
     if (ret != 0)
     {
         JLOG_ERROR("Create publish semaphore error.");
         return PAHO_FAILURE;
     }
 
-    memset(thread_name, 0x00, sizeof(thread_name));
-    snprintf(thread_name, 64, "mqtt%d", counts++);
-    ret = aos_task_new(thread_name, paho_mqtt_thread, client, MQTT_THREAD_STACK_SIZE);
+    thread_attr_init(&attr, client->client_thread_prio, client->client_thread_ssize);
+    ret = thread_init_ex(&client->client_thread, &attr, paho_mqtt_thread, client);
 
-    if (ret < 0)
+    if (ret != 0)
     {
         JLOG_ERROR("Create MQTT thread error.");
         return PAHO_FAILURE;
@@ -1410,9 +1435,14 @@ int paho_mqtt_publish(MQTTClient *client, enum QoS qos, const char *topic, const
     message.payload = (void *)msg_str;
     message.payloadlen = strlen(message.payload);
 
-    if (client->isblocking && client->pub_sem)
+    if (client->isblocking && sem_is_valid(&client->pub_sem))
     {
-        if(aos_sem_wait(&client->pub_sem, 5 * 1000) < 0)
+
+        struct timespec abs_timeout;
+
+        abs_timeout.tv_sec  = 5;
+        abs_timeout.tv_nsec = 0;
+        if(sem_timedwait(&client->pub_sem, &abs_timeout) < 0)
         {
             return PAHO_FAILURE;
         }

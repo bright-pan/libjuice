@@ -126,7 +126,7 @@ int conn_thread_recv(socket_t sock, char *buffer, size_t size, addr_record_t *sr
 	}
 
 	if (len < 0) {
-		if (sockerrno == SEAGAIN || sockerrno == SEWOULDBLOCK) {
+		if (sockerrno == SEAGAIN || sockerrno == SEWOULDBLOCK || sockerrno == SEBUSY) {
 			JLOG_VERBOSE("No more datagrams to receive");
 			return 0;
 		}

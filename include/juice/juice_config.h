@@ -4,6 +4,19 @@
 #include "juice.h"
 #include <aos/debug.h>
 
+// posix thread
+#if defined(__linux__) || defined(AOS_COMP_POSIX)
+#include <pthread.h>
+#define THREAD_DEFAULT_STACK_SIZE       (40 * 1024)
+#define THREAD_DEFAULT_PRIORITY         32 // 62-32=30
+#define THREAD_DEFAULT_SLICE            10
+#define THREAD_CREATE_JOINABLE          PTHREAD_CREATE_JOINABLE
+#define THREAD_SCOPE_SYSTEM             PTHREAD_SCOPE_SYSTEM
+#define THREAD_EXPLICIT_SCHED           PTHREAD_EXPLICIT_SCHED
+#define THREAD_DEFAULT_GUARD_SIZE       256
+#define THREAD_DYN_INIT                 PTHREAD_DYN_INIT
+#endif
+
 #define BUFFER_SIZE 4096
 #define BIND_ADDRESS "192.168.4.2"
 
@@ -25,7 +38,8 @@
 // #define TURN_SERVER_USERNAME "582e76da4d1dca59a632a28c"
 // #define TURN_SERVER_PASSWORD "8spay3NSF+9uslHA"
 
-
+#define MQTT_THREAD_NAME "mqtt_sdp"
+#define MQTT_THREAD_PRIORITY THREAD_DEFAULT_PRIORITY - 2;
 #define MQTT_THREAD_STACK_SIZE 50000
 #define MQTT_CLIENT_BUF_SIZE SDP_CONTENT_LENGTH
 
@@ -73,19 +87,5 @@
 #define RTP_FRAME_TIMEOUT 1500
 #define RTP_FRAME_TIMEOUT_COUNT (RTP_FRAME_TIMEOUT / RTP_FRAME_COUNT_INTERVAL)
 // #define RTP_FRAME_RESEND_COUNT 3
-
-// posix thread
-#if defined(__linux__) || defined(AOS_COMP_POSIX)
-
-#include <pthread.h>
-#define THREAD_DEFAULT_STACK_SIZE       (40 * 1024)
-#define THREAD_DEFAULT_PRIORITY         30
-#define THREAD_DEFAULT_SLICE            10
-#define THREAD_CREATE_JOINABLE          PTHREAD_CREATE_JOINABLE
-#define THREAD_SCOPE_SYSTEM             PTHREAD_SCOPE_SYSTEM
-#define THREAD_EXPLICIT_SCHED           PTHREAD_EXPLICIT_SCHED
-#define THREAD_DEFAULT_GUARD_SIZE       256
-#define THREAD_DYN_INIT                 PTHREAD_DYN_INIT
-#endif
 
 #endif

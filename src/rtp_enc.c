@@ -427,46 +427,20 @@ static void audio_3a_process(audio_t *audio, char *pMicIn,int frameSize ,char *p
     }
 }
 
-static void rtp_packet_video(char *packet, int bytes, void *user_data) {
+static void rtp_packetizer_callback(char *packet, int bytes, void *user_data) {
     int ret;
     peer_connection_t *pc = user_data;
     ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
     // JLOG_INFO("add rtp frame[%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
-    // send data
     if (ret == srtp_err_status_ok) {
-        if (juice_send(pc->juice_agent, packet, bytes) == JUICE_ERR_SUCCESS) {
-            rtp_header_t *pheader = (rtp_header_t *)packet;
-            rtp_list_wlock(&pc->rtp_send_cache_list);
-            rtp_frame_t *frame = rtp_frame_malloc(ntohl(pheader->ssrc), ntohs(pheader->seq_number), packet, bytes);
-            if (frame) {
-                // insert into rtp cache list
-                if (rtp_list_insert(&pc->rtp_send_cache_list, frame) < 0) {
-                    JLOG_ERROR("rtp_list_insert error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
-                    rtp_frame_free(frame);
-                }
-            } else {
-                JLOG_ERROR("rtp_frame_malloc error!");
-            }
-            rtp_list_unlock(&pc->rtp_send_cache_list);
-        } else {
-            JLOG_ERROR("juice_send error");
+        ret = rtp_list_insert_packet(&pc->rtp_send_cache_list, packet, bytes);
+        if (ret < 0) {
+            JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
         }
     } else {
         JLOG_ERROR("srtp_encrypt error");
     }
 }
-
-static void rtp_packet_audio(char *packet, int bytes, void *user_data) {
-    int ret;
-    peer_connection_t *pc = user_data;
-    ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
-    if (ret == srtp_err_status_ok) {
-        juice_send(pc->juice_agent, packet, bytes);
-    } else {
-        JLOG_ERROR("srtp_encrypt error");
-    }
-}
-
 
 static void *rtp_video_enc_thread_entry(void *param) {
     peer_connection_t *pc = param;
@@ -481,8 +455,7 @@ static void *rtp_video_enc_thread_entry(void *param) {
     if (pc->options.video_codec) {
         uint32_t now_timestamp = aos_now_ms();
         rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
-                            now_timestamp,
-                            rtp_packet_video, pc);
+                            now_timestamp, rtp_packetizer_callback, pc);
     }
 
     while (1) {
@@ -492,7 +465,9 @@ static void *rtp_video_enc_thread_entry(void *param) {
                 for(iPackid = 0; iPackid < venc_stream.u32PackCount; iPackid++ )
                 {
                     pPack = &venc_stream.pstPack[iPackid];
+                    rtp_list_wlock(&pc->rtp_send_cache_list);
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
+                    rtp_list_unlock(&pc->rtp_send_cache_list);
                 }
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             } else {
@@ -521,8 +496,7 @@ static void *rtp_audio_enc_thread_entry(void *param) {
     if (pc->options.audio_codec) {
         uint32_t now_timestamp = aos_now_ms();
         rtp_packetizer_init(&pc->audio_packetizer, pc->options.audio_codec,
-                            now_timestamp,
-                            rtp_packet_audio, pc);
+                            now_timestamp,  rtp_packetizer_callback, pc);
     }
 
     while (1) {
@@ -538,9 +512,9 @@ static void *rtp_audio_enc_thread_entry(void *param) {
                 audio_stereo2mono(audio, (short *)pcm_capture_buffer, (short *)pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, MIC_AUDIO_LEFT);
                 // pcm -> g711-alaw, 16bit to 8bit, mono channel
                 pcm16_to_alaw(PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES, pcm_capture_enc_buffer, pcm_capture_buffer);
-                // rtp_list_wlock(&pc->rtp_send_cache_list);
+                rtp_list_wlock(&pc->rtp_send_cache_list);
                 rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
-                // rtp_list_unlock(&pc->rtp_send_cache_list);
+                rtp_list_unlock(&pc->rtp_send_cache_list);
                 // int buffer_size = ret * pcm->channel * (pcm->bit_depth / 8);
                 // JLOG_INFO_DUMP_HEX(pcm_capture_buffer, buffer_size, "pcm_capture_buffer: read_size=%d, buffer_size=%d", ret, buffer_size);
             } else {

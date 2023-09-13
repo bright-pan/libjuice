@@ -56,6 +56,7 @@ typedef ULONG nfds_t;
 #define SECONNRESET WSAECONNRESET
 #define SENETRESET WSAENETRESET
 #define SEMSGSIZE WSAEMSGSIZE
+#define SEBUSY WSAEBUSY
 
 #define sock_strerr(errno)
 
@@ -75,6 +76,7 @@ typedef ULONG nfds_t;
 #include <lwip/api.h>
 #include <lwip/inet.h>
 #include <lwip/netdb.h>
+#include <lwip/errno.h>
 #else
 #include <net/if.h>
 #include <netdb.h>
@@ -118,6 +120,7 @@ typedef int sockopt_t;
 #define SECONNRESET ECONNRESET
 #define SENETRESET ENETRESET
 #define SEMSGSIZE EMSGSIZE
+#define SEBUSY EBUSY
 
 #define sock_strerr(errno) lwip_strerr(errno)
 

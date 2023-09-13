@@ -6,6 +6,8 @@
 #include <MQTTPacket.h>
 
 #include <aos/kernel.h>
+#include "thread.h"
+#include <semaphore.h>
 
 #ifdef MQTT_USING_TLS
 #include <tls_client.h>
@@ -27,6 +29,9 @@
 #ifdef MQTT_USING_TLS
 #define MQTT_TLS_READ_BUFFER    4096
 #endif
+
+#define sem_is_valid(sem) aos_sem_is_valid((aos_sem_t *)&((sem)->aos_sem))
+
 
 enum QoS { QOS0, QOS1, QOS2 };
 
@@ -64,6 +69,11 @@ struct MQTTClient
     const char *uri;
     int sock;
 
+    char *client_thread_name;
+    thread_t client_thread;
+    int client_thread_ssize; // stack size
+    int client_thread_prio; // sche proirity
+
     MQTTPacket_connectData condata;
 
     unsigned int next_packetid, command_timeout_ms;
@@ -91,7 +101,7 @@ struct MQTTClient
     void (*defaultMessageHandler)(MQTTClient *, MessageData *);
 
     /* publish interface */
-    aos_sem_t pub_sem;             /* publish data semaphore for blocking */
+    sem_t     pub_sem; /* publish data semaphore for blocking */
 #if defined(RT_USING_POSIX_FS) && (defined(RT_USING_DFS_NET) || defined(SAL_USING_POSIX))
     struct rt_pipe_device* pipe_device;
     int pub_pipe[2];

@@ -1,4 +1,6 @@
+#include <lwip/def.h>
 #include "rtp_list.h"
+#include "rtp.h"
 #include "log.h"
 
 
@@ -12,7 +14,7 @@ static int by_bytes(const rtp_frame_t *a, const rtp_frame_t *b)
     return (a->bytes - b->bytes);
 }
 
-rtp_frame_t *rtp_frame_malloc(uint32_t ssrc, int seq, const char *packet, int bytes) {
+rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, const char *packet, int bytes) {
     rtp_frame_t *frame = NULL;
 
     frame = (rtp_frame_t *)uthash_malloc(sizeof(rtp_frame_t));
@@ -21,6 +23,7 @@ rtp_frame_t *rtp_frame_malloc(uint32_t ssrc, int seq, const char *packet, int by
         frame->key.ssrc = ssrc;
         frame->bytes = bytes;
         frame->send_flag = 0;
+        frame->type = type;
         frame->timeout_count = RTP_FRAME_TIMEOUT_COUNT - 1;
         frame->packet = uthash_malloc(bytes);
         if (frame->packet) {
@@ -38,6 +41,23 @@ void rtp_frame_free(rtp_frame_t *frame) {
         uthash_free(frame->packet, 0);
         uthash_free(frame, 0);
     }
+}
+
+int rtp_list_insert_packet(rtp_list_t *insert_list, char *packet, int bytes) {
+    int ret = -1;
+    rtp_header_t *pheader = (rtp_header_t *)packet;
+    rtp_frame_t *frame = rtp_frame_malloc(pheader->type, ntohl(pheader->ssrc), ntohs(pheader->seq_number), packet, bytes);
+    if (frame) {
+        // insert into rtp cache list
+        ret = rtp_list_insert(insert_list, frame);
+        if (ret < 0) {
+            // JLOG_ERROR("rtp_list_insert error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
+            rtp_frame_free(frame);
+        }
+    } else {
+        // JLOG_ERROR("rtp_frame_malloc error!");
+    }
+    return ret;
 }
 
 void rtp_list_init(rtp_list_t *rtp_list) {
@@ -200,11 +220,11 @@ int test_rtplist(int argc, char **argv) {
                 rtp_list_init(&test_list);
                 break;
             case 1:
-                s = rtp_frame_malloc(atoi(argv[2]), id++, argv[3], atoi(argv[4]));
+                s = rtp_frame_malloc(0, atoi(argv[2]), id++, argv[3], atoi(argv[4]));
                 rtp_list_insert(&test_list, s);
                 break;
             case 2:
-                s = rtp_frame_malloc(atoi(argv[2]), atoi(argv[3]), argv[4], atoi(argv[5]));
+                s = rtp_frame_malloc(0, atoi(argv[2]), atoi(argv[3]), argv[4], atoi(argv[5]));
                 rtp_list_insert(&test_list, s);
                 break;
             case 3:

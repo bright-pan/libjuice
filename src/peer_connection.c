@@ -178,7 +178,10 @@ static void *rtp_push_thread_entry(void *args)
     while (1) {
         rtp_list_wlock(&pc->rtp_send_cache_list);
         HASH_ITER(hh, pc->rtp_send_cache_list.utlist, frame, tmp) {
-            if (frame->timeout_count-- <= 0) {
+            if (frame->send_flag++ == 0) {
+                juice_send(pc->juice_agent, frame->packet, frame->bytes);
+            }
+            if (frame->type == RTP_PAYLOAD_TYPE_PCMA || frame->timeout_count-- <= 0) {
                 rtp_list_delete(&pc->rtp_send_cache_list, frame);
             }
         }
@@ -334,18 +337,10 @@ static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, v
         } else {
             ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, buf, &bytes);
             if (ret == srtp_err_status_ok) {
-                rtp_header_t *pheader = (rtp_header_t *)buf;
                 rtp_list_wlock(&pc->rtp_recv_cache_list);
-                rtp_frame_t *frame = rtp_frame_malloc(ntohl(pheader->ssrc), ntohs(pheader->seq_number), buf, bytes);
-                // JLOG_INFO_DUMP_HEX(buf, bytes, "recv rtp packet[%d],ssrc:%d,seq:%d-->", bytes, ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
-                if (frame) {
-                    // insert into rtp cache list
-                    if (rtp_list_insert(&pc->rtp_recv_cache_list, frame) < 0) {
-                        // JLOG_ERROR("insert rtp recv cache list error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
-                        rtp_frame_free(frame);
-                    }
-                } else {
-                    JLOG_ERROR("rtp frame malloc error!");
+                ret = rtp_list_insert_packet(&pc->rtp_recv_cache_list, buf, bytes);
+                if (ret < 0) {
+                    // JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
                 }
                 rtp_list_unlock(&pc->rtp_recv_cache_list);
             } else {
@@ -403,30 +398,30 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     // pc loop
     pc->loop_thread = NULL;
     pc->loop_thread_ssize = 32*1024;
-    pc->loop_thread_prio = 31;
+    pc->loop_thread_prio = THREAD_DEFAULT_PRIORITY - 1;
 
     // rtp push
     pc->rtp_push_thread = NULL;
     pc->rtp_push_thread_ssize = 32*1024;
-    pc->rtp_push_thread_prio = 29;
+    pc->rtp_push_thread_prio = THREAD_DEFAULT_PRIORITY - 1;
 
     // rtp video encode
     pc->rtp_video_enc_thread = NULL;
     pc->rtp_video_enc_loop_flag = 0;
     pc->rtp_video_enc_thread_ssize = 16*1024;
-    pc->rtp_video_enc_thread_prio = 30;
+    pc->rtp_video_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
 
     // rtp audio encode
     pc->rtp_audio_enc_thread = NULL;
     pc->rtp_audio_enc_loop_flag = 0;
     pc->rtp_audio_enc_thread_ssize = 16*1024;
-    pc->rtp_audio_enc_thread_prio = 30;
+    pc->rtp_audio_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
 
     // rtp audio decode
     pc->rtp_audio_dec_thread = NULL;
     pc->rtp_audio_dec_loop_flag = 0;
     pc->rtp_audio_dec_thread_ssize = 32*1024;
-    pc->rtp_audio_dec_thread_prio = 31;
+    pc->rtp_audio_dec_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
 }
 
 static int peer_connection_loop_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
