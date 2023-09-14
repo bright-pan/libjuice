@@ -41,7 +41,6 @@ build_config:
   internal_include:
     - src
     - include/juice
-    - uthash/include
   include:
     - include
 

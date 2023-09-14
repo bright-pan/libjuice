@@ -11,6 +11,9 @@
 #include <stdlib.h>  /* atoi, malloc */
 #include <string.h>  /* strcpy */
 #include "thread.h"
+
+
+#define HASH_FUNCTION(keyptr,keylen,hashv) HASH_FNV(keyptr, keylen, hashv)
 #include "uthash.h"
 
 /* undefine the defaults */
@@ -20,6 +23,12 @@
 /* re-define, specifying alternate functions */
 #define uthash_malloc(sz) juice_malloc(sz)
 #define uthash_free(ptr, sz) juice_free(ptr)
+
+// #undef HASH_FUNCTION
+// #define HASH_FUNCTION(keyptr,keylen,hashv) HASH_FNV(key,keylen,hashv)
+
+// #undef HASH_INITIAL_NUM_BUCKETS
+// #define HASH_INITIAL_NUM_BUCKETS 256
 
 typedef struct {
     int seq;
