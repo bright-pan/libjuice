@@ -12,5 +12,6 @@ void rtp_dec_init(peer_connection_t *pc);
 void rtp_dec_start(peer_connection_t *pc);
 void rtp_dec_stop(peer_connection_t *pc);
 void rtp_dec_restart(peer_connection_t *pc);
+int rtcp_psfb_pli_process(void);
 
 #endif

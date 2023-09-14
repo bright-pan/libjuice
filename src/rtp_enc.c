@@ -672,6 +672,20 @@ void rtp_dec_init(peer_connection_t *pc) {
     rtp_audio_dec_thread_init(pc, rtp_audio_dec_thread_entry);
 }
 
+int rtcp_psfb_pli_process(void) {
+    int ret = -1;
+    static timestamp_t old = 0;
+
+    timestamp_t now = current_timestamp();
+    if (now - old >= RTCP_PSFB_PLI_PROCESS_INTERVAL) {
+        old = now;
+        MEDIA_VIDEO_force_Iframe(0);
+        ret = 0;
+    }
+
+    return ret;
+}
+
 void rtp_enc_start(peer_connection_t *pc) {
     MEDIA_VIDEO_force_Iframe(0);
     pc->rtp_video_enc_loop_flag = 1;

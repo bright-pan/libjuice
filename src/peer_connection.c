@@ -128,7 +128,9 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
                             rtcp_psfb_pli_t psfb_pli = rtcp_packet_parse_psfb_pli(rtcp_buf);
                             uint32_t ssrc_ps = ntohl(psfb_pli.pli_block[0].ssrc_ps);
                             uint32_t ssrc_ms = ntohl(psfb_pli.pli_block[0].ssrc_ms);
-                            JLOG_INFO("PSFB_PLI ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
+                            if (ssrc_ms == RTP_SSRC_TYPE_H264 && rtcp_psfb_pli_process() == 0) {
+                                JLOG_WARN("PSFB_PLI ssrc_ps:%d, ssrc_ms:%d", ssrc_ps, ssrc_ms);
+                            }
                             break;
                         }
                         case RTCP_FMT_PSFB_REMB: {
@@ -300,7 +302,7 @@ static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user
     // Filter server reflexive candidates
     // if (strstr(sdp, "srflx") || strstr(sdp, "host"))
     //     return;
-    if (strstr(sdp, "host") || strstr(sdp, "relay"))
+    if (strstr(sdp, "host"))
         return;
     JLOG_INFO("%s candidate: %s", pc->name, sdp);
 
