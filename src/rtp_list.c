@@ -62,15 +62,17 @@ int rtp_list_insert_packet(rtp_list_t *insert_list, void *packet, int bytes) {
 
 void rtp_list_init(rtp_list_t *rtp_list) {
     rtp_list->utlist = NULL;
-    rwlock_init(&rtp_list->rwlock);
+    if (rwlock_init(&rtp_list->rwlock) != 0) {
+        JLOG_FATAL("can't create rwlock");
+    }
 }
 
-void rtp_list_rlock(rtp_list_t *rtp_list) {
-    rwlock_rlock(&rtp_list->rwlock);
+int rtp_list_rlock(rtp_list_t *rtp_list) {
+    return rwlock_rlock(&rtp_list->rwlock);
 }
 
-void rtp_list_wlock(rtp_list_t *rtp_list) {
-    rwlock_wlock(&rtp_list->rwlock);
+int rtp_list_wlock(rtp_list_t *rtp_list) {
+    return rwlock_wlock(&rtp_list->rwlock);
 }
 
 void rtp_list_unlock(rtp_list_t *rtp_list) {
@@ -88,15 +90,17 @@ rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
 
 int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size) {
     int ret = -1;
-    rtp_frame_t *s;
+    rtp_frame_t *s = NULL;
 
-    if (frame && (HASH_COUNT(rtp_list->utlist) <= size)) {
-        s = rtp_list_find_by_key(rtp_list, frame->key); /* seq already in the hash? */
-        if (s == NULL) {
-            // HASH_ADD(seq, s);  /* seq is the key field */
-            HASH_ADD(hh, rtp_list->utlist, key, sizeof(rtp_frame_key_t), frame);
-            ret = 0;
+    if (frame) {
+        if (HASH_COUNT(rtp_list->utlist) < size) {
+            s = rtp_list_find_by_key(rtp_list, frame->key); /* seq already in the hash? */
+        } else {
+            s = rtp_list->utlist->hh.next;
         }
+        if (s) rtp_list_delete(rtp_list, s);
+        HASH_ADD(hh, rtp_list->utlist, key, sizeof(rtp_frame_key_t), frame);
+        ret = 0;
     }
     return ret;
 }

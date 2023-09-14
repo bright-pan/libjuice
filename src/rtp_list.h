@@ -45,8 +45,8 @@ rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, in
 void rtp_frame_free(rtp_frame_t *frame);
 
 void rtp_list_init(rtp_list_t *rtp_list);
-void rtp_list_rlock(rtp_list_t *rtp_list);
-void rtp_list_wlock(rtp_list_t *rtp_list);
+int rtp_list_rlock(rtp_list_t *rtp_list);
+int rtp_list_wlock(rtp_list_t *rtp_list);
 void rtp_list_unlock(rtp_list_t *rtp_list);
 
 int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size);

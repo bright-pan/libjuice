@@ -468,9 +468,10 @@ static void *rtp_video_enc_thread_entry(void *param) {
                 for(iPackid = 0; iPackid < venc_stream.u32PackCount; iPackid++ )
                 {
                     pPack = &venc_stream.pstPack[iPackid];
-                    rtp_list_wlock(&pc->rtp_send_cache_list);
-                    rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
-                    rtp_list_unlock(&pc->rtp_send_cache_list);
+                    if (rtp_list_wlock(&pc->rtp_send_cache_list) == 0) {
+                        rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
+                        rtp_list_unlock(&pc->rtp_send_cache_list);
+                    }
                 }
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             } else {
@@ -515,9 +516,10 @@ static void *rtp_audio_enc_thread_entry(void *param) {
                 audio_stereo2mono(audio, (short *)pcm_capture_buffer, (short *)pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, MIC_AUDIO_LEFT);
                 // pcm -> g711-alaw, 16bit to 8bit, mono channel
                 pcm16_to_alaw(PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES, pcm_capture_enc_buffer, pcm_capture_buffer);
-                rtp_list_wlock(&pc->rtp_send_cache_list);
-                rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
-                rtp_list_unlock(&pc->rtp_send_cache_list);
+                if (rtp_list_wlock(&pc->rtp_send_cache_list) == 0) {
+                    rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
+                    rtp_list_unlock(&pc->rtp_send_cache_list);
+                }
                 // int buffer_size = ret * pcm->channel * (pcm->bit_depth / 8);
                 // JLOG_INFO_DUMP_HEX(pcm_capture_buffer, buffer_size, "pcm_capture_buffer: read_size=%d, buffer_size=%d", ret, buffer_size);
             } else {
