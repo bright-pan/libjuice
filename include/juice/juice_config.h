@@ -3,6 +3,7 @@
 
 #include "juice.h"
 #include <aos/debug.h>
+#include "codec.h"
 
 // posix thread
 #if defined(__linux__) || defined(AOS_COMP_POSIX)
@@ -91,4 +92,7 @@
 #define RTCP_PSFB_PLI_PROCESS_INTERVAL 1000
 // #define RTP_FRAME_RESEND_COUNT 3
 
+#define PEER_CONNECTION_VIDEO_CODEC MEDIA_CODEC_H264;
+#define PEER_CONNECTION_AUDIO_CODEC MEDIA_CODEC_PCMA;
+#define PEER_CONNECTION_DATA_CHANNEL 0
 #endif

@@ -403,9 +403,9 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->options = *options;
     pc->name = name;
     pc->role = role;
-    pc->options.video_codec = MEDIA_CODEC_H264;
-    pc->options.audio_codec = MEDIA_CODEC_PCMA;
-    pc->options.datachannel = 1;
+    pc->options.video_codec = PEER_CONNECTION_VIDEO_CODEC;
+    pc->options.audio_codec = PEER_CONNECTION_AUDIO_CODEC;
+    pc->options.datachannel = PEER_CONNECTION_DATA_CHANNEL;
 
     // pc loop
     pc->loop_thread = NULL;
@@ -598,12 +598,14 @@ void *loop_thread_entry(void *param) {
                         rtp_list_unlock(&pc->rtp_recv_process_list);
                     }
                 }
-                //recv fifo
-                char buf[4096];
-                int recv_count;
-                recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
-                if (recv_count > 0) {
-                    sctp_incoming_data(&pc->sctp, buf, recv_count);
+                if (pc->options.datachannel) {
+                    //recv fifo
+                    char buf[4096];
+                    int recv_count;
+                    recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
+                    if (recv_count > 0) {
+                        sctp_incoming_data(&pc->sctp, buf, recv_count);
+                    }
                 }
                 break;
             }

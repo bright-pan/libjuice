@@ -93,9 +93,9 @@ int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size) {
     rtp_frame_t *s = NULL;
 
     if (frame) {
-        if (HASH_COUNT(rtp_list->utlist) < size) {
-            s = rtp_list_find_by_key(rtp_list, frame->key); /* seq already in the hash? */
-        } else {
+        s = rtp_list_find_by_key(rtp_list, frame->key); /* seq already in the hash? */
+
+        if (s == NULL && HASH_COUNT(rtp_list->utlist) > size) {
             s = rtp_list->utlist->hh.next;
         }
         if (s) rtp_list_delete(rtp_list, s);
