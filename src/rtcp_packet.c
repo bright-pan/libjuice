@@ -80,7 +80,7 @@ rtcp_rtpfb_nack_t rtcp_packet_parse_rtpfb_nack(uint8_t *packet) {
     packet += sizeof(uint32_t);
 
     uint32_t nack_block_size = ntohs(rtcp_rtpfb_nack.header.length) - 2;
-    nack_block_size = nack_block_size > RTCP_RTPFB_NACK_BLOCK_SIZE ? RTCP_RTPFB_NACK_BLOCK_SIZE : nack_block_size; // limit block size;
+    nack_block_size = nack_block_size > NACK_BLOCK_SIZE ? NACK_BLOCK_SIZE : nack_block_size; // limit block size;
 
     memcpy(&rtcp_rtpfb_nack.nack_block[0], packet, nack_block_size * sizeof(uint32_t));
 
@@ -95,12 +95,15 @@ rtcp_psfb_pli_t rtcp_packet_parse_psfb_pli(uint8_t *packet) {
 
     return rtcp_psfb_pli;
 }
-
+/*
 rtcp_psfb_remb_t rtcp_packet_parse_psfb_remb(uint8_t *packet) {
 
     rtcp_psfb_remb_t rtcp_psfb_remb;
     memcpy(&rtcp_psfb_remb.header, packet, sizeof(rtcp_psfb_remb.header));
-    memcpy(&rtcp_psfb_remb.remb_block[0], packet + 4, ntohs(rtcp_psfb_remb.header.length) * sizeof(uint32_t));
+    packet += sizeof(rtcp_psfb_remb.header);
+
+    memcpy(&rtcp_psfb_remb.remb_block[0], packet, ntohs(rtcp_psfb_remb.header.length) * sizeof(uint32_t));
 
     return rtcp_psfb_remb;
 }
+*/

@@ -25,7 +25,9 @@ RTCP_REMB_FMT(15): 带宽估计, type-206
 ————————————————
 */
 
-#define RTCP_RTPFB_NACK_BLOCK_SIZE 10
+#define NACK_BLOCK_SIZE 10
+#define SSRC_FEEDBACK_BLOCK_SIZE 5
+#define REPORT_BLOCK_SIZE 5
 
 typedef enum {
 
@@ -69,15 +71,12 @@ typedef struct {
 } rtcp_header_t;
 
 typedef struct {
-
-    uint32_t ssrc;
     uint32_t rsrc;
     uint32_t flcnpl;
     uint32_t ehsnr;
     uint32_t jitter;
     uint32_t lsr;
     uint32_t dlsr;
-
 } rtcp_report_block_t;
 
 typedef struct {
@@ -90,7 +89,7 @@ typedef struct {
     rtcp_header_t header;
     uint32_t ssrc_ps;// packet sender
     uint32_t ssrc_ms;// media source
-    rtcp_rtpfb_nack_block_t nack_block[RTCP_RTPFB_NACK_BLOCK_SIZE];
+    rtcp_rtpfb_nack_block_t nack_block[NACK_BLOCK_SIZE];
 
 } rtcp_rtpfb_nack_t;
 
@@ -108,41 +107,32 @@ typedef struct {
 
 } rtcp_psfb_pli_t;
 
-typedef union {
-    struct {
-        #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-            uint32_t mantissa:18;
-            uint32_t exp:6;
-            uint32_t num_ssrc:8;
-        #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-            uint32_t num_ssrc:8;
-            uint32_t exp:6;
-            uint32_t mantissa:18;
-        #endif
-    } s;
-    uint32_t value;
-} br_union_t;
+typedef struct {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    uint32_t mantissa:18;
+    uint32_t exp:6;
+    uint32_t num_ssrc:8;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint32_t num_ssrc:8;
+    uint32_t exp:6;
+    uint32_t mantissa:18;
+#endif
+} rtcp_psfb_remb_br_t;
 
 typedef struct {
-
+    rtcp_header_t header;
     uint32_t ssrc_ps;// packet sender
     uint32_t ssrc_ms;// media source
     uint32_t remb;
-    br_union_t br;
-    uint32_t ssrc_feedback;
-} rtcp_psfb_remb_block_t;
-
-typedef struct {
-
-    rtcp_header_t header;
-    rtcp_psfb_remb_block_t remb_block[1];
-
+    uint32_t br;
+    uint32_t ssrc_feedback_block[SSRC_FEEDBACK_BLOCK_SIZE];
 } rtcp_psfb_remb_t;
 
 typedef struct {
 
     rtcp_header_t header;
-    rtcp_report_block_t report_block[1];
+    uint32_t ssrc;
+    rtcp_report_block_t report_block[REPORT_BLOCK_SIZE];
 
 } rtcp_rr_t;
 
@@ -171,6 +161,6 @@ int rtcp_packet_get_fir(uint8_t *packet, int len, int *seqnr);
 rtcp_rr_t rtcp_packet_parse_rr(uint8_t *packet);
 rtcp_rtpfb_nack_t rtcp_packet_parse_rtpfb_nack(uint8_t *packet);
 rtcp_psfb_pli_t rtcp_packet_parse_psfb_pli(uint8_t *packet);
-rtcp_psfb_remb_t rtcp_packet_parse_psfb_remb(uint8_t *packet);
+// rtcp_psfb_remb_t rtcp_packet_parse_psfb_remb(uint8_t *packet);
 
 #endif // RTCP_PACKET_H_

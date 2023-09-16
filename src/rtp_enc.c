@@ -301,7 +301,6 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 //     }
 // }
 
-
 static void audio_3a_init(audio_t *audio)
 {
     char pstrVersion[52];
@@ -430,18 +429,26 @@ static void audio_3a_process(audio_t *audio, char *pMicIn,int frameSize ,char *p
 static void rtp_enc_packetizer_callback(char *packet, int bytes, void *user_data) {
     int ret;
     peer_connection_t *pc = user_data;
-    ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
-    // JLOG_INFO("add rtp frame[%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
-    if (ret == srtp_err_status_ok) {
-        juice_send(pc->juice_agent, packet, bytes);
-        if (((rtp_header_t *)packet)->type == RTP_PAYLOAD_TYPE_H264) {
-            ret = rtp_list_insert_packet(&pc->rtp_send_cache_list, packet, bytes);
-            if (ret < 0) {
-                JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
-            }
+
+    // JLOG_INFO("rtp_enc_packetizer_callback [%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
+    if (((rtp_header_t *)packet)->type == RTP_PAYLOAD_TYPE_H264) {
+        ret = rtp_list_insert_packet(&pc->rtp_send_cache_list, packet, bytes);
+        if (ret < 0) {
+            JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_send_cache_list));
         }
-    } else {
-        JLOG_ERROR("srtp_encrypt error");
+    }
+    // send
+    if (peer_connection_encrypt_send(pc, packet, bytes) != JUICE_ERR_SUCCESS) {
+        JLOG_ERROR("peer_connection_encrypt_send error");
+    }
+}
+
+static void rtp_enc_rtx_packetizer_callback(char *packet, int bytes, void *user_data) {
+    peer_connection_t *pc = user_data;
+
+    // JLOG_INFO("rtp_enc_rtx_packetizer_callback [%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
+    if (peer_connection_encrypt_send(pc, packet, bytes) != JUICE_ERR_SUCCESS) {
+        JLOG_ERROR("peer_connection_encrypt_send error");
     }
 }
 
@@ -455,10 +462,15 @@ static void *rtp_video_enc_thread_entry(void *param) {
     // video initialize
     LG_media_video_init(PARAM_RGB_PIPELINE);
 
+    uint32_t now_timestamp = current_timestamp();
     if (pc->options.video_codec) {
-        uint32_t now_timestamp = aos_now_ms();
         rtp_packetizer_init(&pc->video_packetizer, pc->options.video_codec,
                             now_timestamp, rtp_enc_packetizer_callback, pc);
+    }
+
+    if (pc->options.video_rtx_codec) {
+        rtp_packetizer_init(&pc->video_rtx_packetizer, pc->options.video_rtx_codec,
+                            now_timestamp, rtp_enc_rtx_packetizer_callback, pc);
     }
 
     while (1) {

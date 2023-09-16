@@ -17,13 +17,15 @@ typedef enum {
     RTP_PAYLOAD_TYPE_PCMA = 8,
     RTP_PAYLOAD_TYPE_G722 = 9,
     RTP_PAYLOAD_TYPE_H264 = 102,
+    RTP_PAYLOAD_TYPE_H264_RTX = 103,// rtx
     RTP_PAYLOAD_TYPE_OPUS = 111
 
 } rtp_payload_type_t;
 
 typedef enum {
 
-    RTP_SSRC_TYPE_H264 = 123456,
+    RTP_SSRC_TYPE_H264 = 9527,
+    RTP_SSRC_TYPE_H264_RTX = 9528,
     RTP_SSRC_TYPE_PCMA = 4,
     RTP_SSRC_TYPE_PCMU = 5,
     RTP_SSRC_TYPE_OPUS = 6,
@@ -53,6 +55,8 @@ typedef struct {
 
 } rtp_header_t;
 
+#define RTP_PACKETIZER_BUF_SIZE (CONFIG_MTU + sizeof(rtp_header_t) * 2)
+
 typedef struct {
 
     rtp_header_t header;
@@ -62,11 +66,19 @@ typedef struct {
 
 typedef struct {
 
+    uint16_t osn;
+    uint8_t payload[0];
+
+} rtp_rtx_t;
+
+typedef struct {
+
     int pt_h264;
     int pt_opus;
     int pt_pcma;
 
 } rtp_map_t;
+
 
 typedef struct rtp_packetizer rtp_packetizer_t;
 
@@ -79,7 +91,7 @@ struct rtp_packetizer {
     uint16_t seq_number;
     uint32_t ssrc;
     uint32_t timestamp;
-    uint8_t buf[CONFIG_MTU + 1];
+    uint8_t buf[RTP_PACKETIZER_BUF_SIZE];
 };
 
 int rtp_packet_validate(uint8_t *packet, size_t size);

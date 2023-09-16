@@ -40,6 +40,7 @@ typedef struct peer_options {
 	juice_config_t juice_config;
     media_codec_t audio_codec;
     media_codec_t video_codec;
+    media_codec_t video_rtx_codec;
     int datachannel;
 } peer_options_t;
 
@@ -109,6 +110,7 @@ typedef struct peer_connect {
 
     rtp_packetizer_t audio_packetizer;
     rtp_packetizer_t video_packetizer;
+    rtp_packetizer_t video_rtx_packetizer;
 
 } peer_connection_t;
 
@@ -194,6 +196,7 @@ int peer_connection_send_video(peer_connection_t *pc, const uint8_t *packet, siz
 void peer_connection_set_current_ip(const char *ip);
 
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end);
+int peer_connection_encrypt_send(peer_connection_t *pc, char *packet, int bytes);
 
 // void peer_connection_reset_video_fifo(peer_connection_t *pc);
 #ifdef __cplusplus

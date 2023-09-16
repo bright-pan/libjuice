@@ -10,6 +10,7 @@
 #include "rtp.h"
 #include "rtp_list.h"
 #include "socket.h"
+#include "timestamp.h"
 #include "log.h"
 
 
@@ -227,7 +228,32 @@ static int rtp_packetizer_encode_generic(rtp_packetizer_t *rtp_packetizer, uint8
         rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
         ret = 0;
     } else {
-        JLOG_ERROR("rtp_packetizer packet size %ld is too large > %d", size, RTP_PAYLOAD_SIZE);
+        JLOG_ERROR("rtp_packetizer packet size %ld is too large > %d", size, RTP_PACKETIZER_BUF_SIZE);
+    }
+
+    return ret;
+}
+
+static int rtp_packetizer_encode_rtx(rtp_packetizer_t *rtp_packetizer, uint8_t *buf, size_t size) {
+    int ret = -1;
+    rtp_header_t *rtp_header = (rtp_header_t*)rtp_packetizer->buf;
+    rtp_header->version = 2;
+    rtp_header->padding = 0;
+    rtp_header->extension = 0;
+    rtp_header->csrccount = 0;
+    rtp_header->markerbit = 0;
+    rtp_header->type = rtp_packetizer->type;
+    rtp_header->seq_number = htons(rtp_packetizer->seq_number++);
+    rtp_header->timestamp = ((rtp_header_t *)buf)->timestamp;
+    rtp_header->ssrc = htonl(rtp_packetizer->ssrc);
+    if (size + 2 <= RTP_PACKETIZER_BUF_SIZE) {
+        rtp_rtx_t *rtx = (rtp_rtx_t *)(rtp_packetizer->buf + sizeof(rtp_header_t));
+        rtx->osn = htons(((rtp_header_t *)buf)->seq_number); // set osn
+        memcpy(rtx->payload, buf + sizeof(rtp_header_t),  size - sizeof(rtp_header_t));
+        rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + 2, rtp_packetizer->user_data);
+        ret = 0;
+    } else {
+        JLOG_ERROR("rtp_packetizer_encode_rtx packet size %ld is too large > %d", size + 2, RTP_PACKETIZER_BUF_SIZE);
     }
 
     return ret;
@@ -257,6 +283,11 @@ void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, 
             rtp_packetizer->ssrc = RTP_SSRC_TYPE_PCMU;
             rtp_packetizer->encode_func = rtp_packetizer_encode_generic;
             break;
+        case MEDIA_CODEC_H264_RTX:
+            rtp_packetizer->type = RTP_PAYLOAD_TYPE_H264_RTX;
+            rtp_packetizer->ssrc = RTP_SSRC_TYPE_H264_RTX;
+            rtp_packetizer->encode_func = rtp_packetizer_encode_rtx;
+            break;
         default:
         break;
     }
@@ -266,4 +297,3 @@ int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, void *buf, size_t si
 
     return rtp_packetizer->encode_func(rtp_packetizer, buf, size);
 }
-
