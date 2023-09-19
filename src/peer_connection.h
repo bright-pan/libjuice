@@ -81,9 +81,9 @@ typedef struct peer_connect {
     // packet_fifo_t video_fifo; //send video
     // packet_fifo_t data_fifo; //send data
 
-    rtp_list_t rtp_send_cache_list; // has been sended frame cache list
+    rtp_list_t rtp_tx_cache_list; // has been sended frame cache list
     rtp_list_t rtp_recv_cache_list; // has been sended frame cache list
-    rtp_list_t rtp_recv_process_list; // has been sended frame cache list
+    rtp_list_t rtp_rtx_cache_list; // has been sended frame cache list
 
     thread_t loop_thread; // thread handle
     int loop_thread_ssize; // stack size

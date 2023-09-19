@@ -22,7 +22,6 @@ rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, in
         frame->key.seq = seq;
         frame->key.ssrc = ssrc;
         frame->bytes = bytes;
-        frame->send_flag = 0;
         frame->type = type;
         frame->timeout_count = RTP_FRAME_TIMEOUT_COUNT - 1;
         frame->packet = uthash_malloc(bytes);
