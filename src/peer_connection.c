@@ -25,6 +25,7 @@ static juice_turn_server_t turn_server;
 
 int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
     int ret = JUICE_ERR_FAILED;
+    rtp_frame_key_t key;
     static int _ssrc = 0;
     static int _seq = 0;
 
@@ -36,19 +37,14 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
 
         if (notfound_key.ssrc != ssrc || notfound_key.seq != seq) { // 连续同一个包未找到只处理一次
 
-            rtp_frame_key_t key;
             key.ssrc = ssrc;
             key.seq = seq;
-
             if (rtp_list_rlock(&pc->rtp_tx_cache_list) == 0) {
-                rtp_frame_t *frame = rtp_list_find_by_key(&pc->rtp_tx_cache_list, key);
+                rtp_frame_t *frame = rtp_list_find_by_key_ex(&pc->rtp_tx_cache_list, key);
                 if (frame) {
-                    if (rtp_list_wlock(&pc->rtp_rtx_cache_list) == 0) {
-                        ret = rtp_list_insert_packet(&pc->rtp_rtx_cache_list, frame->packet, frame->bytes);
-                        if (ret < 0) {
-                            JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
-                        }
-                        rtp_list_unlock(&pc->rtp_rtx_cache_list);
+                    ret = rtp_list_insert_packet(&pc->rtp_rtx_cache_list, frame->packet, frame->bytes);
+                    if (ret < 0) {
+                        JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
                     }
                     JLOG_INFO("rtx packet ssrc: %d seq: %d, length: %d", ssrc, seq,  frame->bytes);
                     // rtx
@@ -195,37 +191,36 @@ static void peer_connection_incoming_rtcp(peer_connection_t *pc, uint8_t *buf, s
     }
 }
 
-static void *rtp_push_thread_entry(void *args)
+static void *rtp_tx_timer_thread_entry(void *args)
 {
     int ret = 0;
     rtp_frame_t *frame;
     rtp_frame_t *tmp;
     peer_connection_t *pc = args;
+    timestamp_t ts_now;
 
-    thread_set_name_self("rtp_push");
+    thread_set_name_self("rtp_tx_timer");
 
     while (1) {
-        if (rtp_list_wlock(&pc->rtp_tx_cache_list) == 0) {
-            HASH_ITER(hh, pc->rtp_tx_cache_list.utlist, frame, tmp) {
-                if (frame->timeout_count-- <= 0) {
-                    rtp_list_delete(&pc->rtp_tx_cache_list, frame);
-                }
+        ts_now = current_timestamp();
+        HASH_ITER(hh, pc->rtp_tx_cache_list.utlist, frame, tmp) {
+            if (frame->ts + RTP_TX_CACHE_TIMEOUT < ts_now) {
+                rtp_list_delete(&pc->rtp_tx_cache_list, frame);
             }
-            rtp_list_unlock(&pc->rtp_tx_cache_list);
         }
-        usleep(RTP_FRAME_COUNT_INTERVAL*1000);
+        usleep(RTP_TX_CACHE_TIMEOUT_CHECK*1000);
     }
     pthread_exit(&ret);
     return NULL;
 }
 
-int peer_connection_rtp_push_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
+int peer_connection_rtp_tx_timer_thread_init(peer_connection_t *pc, void *(*thread_entry)(void *)) {
     int ret = -1;
     thread_attr_t attr;
 
-    if (pc->rtp_push_thread == NULL) {
-        thread_attr_init(&attr, pc->rtp_push_thread_prio, pc->rtp_push_thread_ssize);
-        ret = thread_init_ex(&pc->rtp_push_thread, &attr, thread_entry, pc);
+    if (pc->rtp_tx_timer_thread == NULL) {
+        thread_attr_init(&attr, pc->rtp_tx_timer_thread_prio, pc->rtp_tx_timer_thread_ssize);
+        ret = thread_init_ex(&pc->rtp_tx_timer_thread, &attr, thread_entry, pc);
         if (ret != 0) {
             JLOG_ERROR("rtp process thread created failure!");
         } else {
@@ -358,12 +353,9 @@ static void rtp_recv_packet_process(peer_connection_t *pc, char *packet, int byt
     } else {
         ret = dtls_srtp_decrypt_rtp_packet(&pc->dtls_srtp, packet, &bytes);
         if (ret == srtp_err_status_ok) {
-            if (rtp_list_wlock(&pc->rtp_recv_cache_list) == 0) {
-                ret = rtp_list_insert_packet(&pc->rtp_recv_cache_list, packet, bytes);
-                if (ret < 0) {
-                    // JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
-                }
-                rtp_list_unlock(&pc->rtp_recv_cache_list);
+            ret = rtp_list_insert_packet(&pc->rtp_recv_cache_list, packet, bytes);
+            if (ret < 0) {
+                // JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
             }
         } else {
             JLOG_INFO_DUMP_HEX(packet, bytes, "--------------invalid[%d] rtp packet[%d]---------------", ret, bytes);
@@ -432,9 +424,9 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     pc->loop_thread_prio = THREAD_DEFAULT_PRIORITY - 1;
 
     // rtp push
-    pc->rtp_push_thread = NULL;
-    pc->rtp_push_thread_ssize = 32*1024;
-    pc->rtp_push_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
+    pc->rtp_tx_timer_thread = NULL;
+    pc->rtp_tx_timer_thread_ssize = 32*1024;
+    pc->rtp_tx_timer_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
 
     // rtp video encode
     pc->rtp_video_enc_thread = NULL;
@@ -496,6 +488,8 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     sdp_reset(&pc->local_sdp);
     // // TODO: check if we have video or audio codecs
     sdp_create(&pc->local_sdp, b_video, b_audio, b_datachannel);
+
+    mutex_init(&pc->packetizer_mutex, 0);
 
     if (pc->options.audio_codec == MEDIA_CODEC_PCMA) {
 
@@ -597,7 +591,7 @@ void *loop_thread_entry(void *param) {
                         }
                     }
                 } else if (pc->dtls_srtp.state == DTLS_SRTP_STATE_CONNECTED) {
-                    peer_connection_rtp_push_thread_init(pc, rtp_push_thread_entry);
+                    peer_connection_rtp_tx_timer_thread_init(pc, rtp_tx_timer_thread_entry);
                     STATE_CHANGED(pc, PEER_CONNECTION_COMPLETED);
                     rtp_enc_init(pc);
                     rtp_enc_start(pc);
@@ -607,14 +601,11 @@ void *loop_thread_entry(void *param) {
             }
             case PEER_CONNECTION_COMPLETED: {
                 if (rtp_list_count(&pc->rtp_rtx_cache_list) > 0) {
-                    if (rtp_list_wlock(&pc->rtp_rtx_cache_list) == 0) {
-                        HASH_ITER(hh, pc->rtp_rtx_cache_list.utlist, frame, tmp) {
-                            // process rtp packet
-                            peer_connection_encrypt_send(pc, frame->packet, frame->bytes);
-                            // remove frame
-                            rtp_list_delete(&pc->rtp_rtx_cache_list, frame);
-                        }
-                        rtp_list_unlock(&pc->rtp_rtx_cache_list);
+                    HASH_ITER(hh, pc->rtp_rtx_cache_list.utlist, frame, tmp) {
+                        // process rtp packet
+                        peer_connection_encrypt_send(pc, frame->packet, frame->bytes);
+                        // remove frame
+                        rtp_list_delete(&pc->rtp_rtx_cache_list, frame);
                     }
                 }
                 // if (pc->options.datachannel) {

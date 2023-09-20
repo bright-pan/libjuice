@@ -23,7 +23,7 @@ rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, in
         frame->key.ssrc = ssrc;
         frame->bytes = bytes;
         frame->type = type;
-        frame->timeout_count = RTP_FRAME_TIMEOUT_COUNT - 1;
+        frame->ts = current_timestamp();
         frame->packet = uthash_malloc(bytes);
         if (frame->packet) {
             memcpy(frame->packet, packet, bytes);
@@ -78,12 +78,18 @@ void rtp_list_unlock(rtp_list_t *rtp_list) {
     rwlock_unlock(&rtp_list->rwlock);
 }
 
-rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
-    rtp_frame_t l, *s;
+rtp_frame_t *rtp_list_find_by_key_ex(rtp_list_t *rtp_list, rtp_frame_key_t key) {
+    rtp_frame_t *s;
+    HASH_FIND(hh, rtp_list->utlist, &key, sizeof(rtp_frame_key_t), s);  /* seq already in the hash? */
+    return s;
+}
 
-    memset(&l, 0, sizeof(rtp_frame_t));
-    l.key = key;
-    HASH_FIND(hh, rtp_list->utlist, &l.key, sizeof(rtp_frame_key_t), s);  /* seq already in the hash? */
+rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
+    rtp_frame_t *s = NULL;
+    if (rwlock_rlock(&rtp_list->rwlock) == 0) {
+        s = rtp_list_find_by_key_ex(rtp_list, key);
+        rwlock_unlock(&rtp_list->rwlock);
+    }
     return s;
 }
 
@@ -92,12 +98,19 @@ int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size) {
     rtp_frame_t *s = NULL;
 
     if (frame) {
-        s = rtp_list_find_by_key(rtp_list, frame->key); /* seq already in the hash? */
-        if (s == NULL && HASH_COUNT(rtp_list->utlist) > size) {
-            s = rtp_list->utlist;
+        if (rwlock_wlock(&rtp_list->rwlock) == 0) {
+            HASH_FIND(hh, rtp_list->utlist, &frame->key, sizeof(rtp_frame_key_t), s);
+            if (s == NULL && HASH_COUNT(rtp_list->utlist) > size) {
+                s = rtp_list->utlist;
+            }
+            if (s) {
+                HASH_DEL(rtp_list->utlist, s);  /* frame: pointer to delete */
+                uthash_free(s->packet, 0);
+                uthash_free(s, 0);
+            }
+            HASH_ADD(hh, rtp_list->utlist, key, sizeof(rtp_frame_key_t), frame);
+            rwlock_unlock(&rtp_list->rwlock);
         }
-        if (s) rtp_list_delete(rtp_list, s);
-        HASH_ADD(hh, rtp_list->utlist, key, sizeof(rtp_frame_key_t), frame);
         ret = 0;
     }
     return ret;
@@ -109,7 +122,10 @@ int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size) {
 
 void rtp_list_pop(rtp_list_t *rtp_list, rtp_frame_t *frame) {
     if (frame) {
-        HASH_DEL(rtp_list->utlist, frame);  /* frame: pointer to delete */
+        if (rwlock_wlock(&rtp_list->rwlock) == 0) {
+            HASH_DEL(rtp_list->utlist, frame);  /* frame: pointer to delete */
+            rwlock_unlock(&rtp_list->rwlock);
+        }
     }
 }
 
@@ -124,8 +140,12 @@ void rtp_list_pop(rtp_list_t *rtp_list, rtp_frame_t *frame) {
 
 void rtp_list_delete(rtp_list_t *rtp_list, rtp_frame_t *frame) {
     if (frame) {
-        HASH_DEL(rtp_list->utlist, frame);  /* frame: pointer to delete */
-        rtp_frame_free(frame);
+        if (rwlock_wlock(&rtp_list->rwlock) == 0) {
+            HASH_DEL(rtp_list->utlist, frame);  /* frame: pointer to delete */
+            uthash_free(frame->packet, 0);
+            uthash_free(frame, 0);
+            rwlock_unlock(&rtp_list->rwlock);
+        }
     }
 }
 

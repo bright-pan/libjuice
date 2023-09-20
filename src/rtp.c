@@ -294,6 +294,5 @@ void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, 
 }
 
 int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, void *buf, size_t size) {
-
     return rtp_packetizer->encode_func(rtp_packetizer, buf, size);
 }

@@ -86,9 +86,9 @@ int conn_thread_process(juice_agent_t *agent, struct pollfd *pfd) {
 		addr_record_t src;
 		int len;
 		while ((len = conn_thread_recv(conn_impl->sock, buffer, BUFFER_SIZE, &src)) > 0) {
-			mutex_unlock(&conn_impl->mutex);
+			// mutex_unlock(&conn_impl->mutex);
 			ret = agent_conn_recv(agent, buffer, (size_t)len, &src);
-			mutex_lock(&conn_impl->mutex);
+			// mutex_lock(&conn_impl->mutex);
 			if (ret != 0) {
 				JLOG_WARN("Agent receive failed");
 				ret = -1;

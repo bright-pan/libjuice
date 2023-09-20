@@ -10,6 +10,7 @@
 #include <stdio.h>   /* printf */
 #include <stdlib.h>  /* atoi, malloc */
 #include <string.h>  /* strcpy */
+#include "timestamp.h"
 #include "thread.h"
 
 
@@ -39,7 +40,7 @@ typedef struct {
     rtp_frame_key_t key;                    /* key */
     char *packet;
     int bytes;
-    int timeout_count;
+    timestamp_t ts;
     int send_flag;
     int type;
     UT_hash_handle hh;         /* makes this structure hashable */
@@ -63,6 +64,7 @@ int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size);
 int rtp_list_insert_packet(rtp_list_t *insert_list, void *packet, int bytes);
 void rtp_list_pop(rtp_list_t *rtp_list, rtp_frame_t *frame);
 rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key);
+rtp_frame_t *rtp_list_find_by_key_ex(rtp_list_t *rtp_list, rtp_frame_key_t key);
 void rtp_list_delete(rtp_list_t *rtp_list, rtp_frame_t *frame);
 void rtp_list_delete_all(rtp_list_t *rtp_list);
 void rtp_list_reset(rtp_list_t *rtp_list);

@@ -8,7 +8,6 @@
 #endif
 
 #include <stdint.h>
-
 #include "codec.h"
 
 typedef enum {

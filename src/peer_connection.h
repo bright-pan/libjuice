@@ -89,9 +89,9 @@ typedef struct peer_connect {
     int loop_thread_ssize; // stack size
     int loop_thread_prio; // sche proirity
 
-    thread_t rtp_push_thread; // thread handle
-    int rtp_push_thread_ssize; // stack size
-    int rtp_push_thread_prio; // sche proirity
+    thread_t rtp_tx_timer_thread; // thread handle
+    int rtp_tx_timer_thread_ssize; // stack size
+    int rtp_tx_timer_thread_prio; // sche proirity
 
     thread_t rtp_video_enc_thread; // thread handle
     int rtp_video_enc_loop_flag;
@@ -108,6 +108,7 @@ typedef struct peer_connect {
     int rtp_audio_dec_thread_ssize; // stack size
     int rtp_audio_dec_thread_prio; // sche proirity
 
+    mutex_t packetizer_mutex;
     rtp_packetizer_t audio_packetizer;
     rtp_packetizer_t video_packetizer;
     rtp_packetizer_t video_rtx_packetizer;
