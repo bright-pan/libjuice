@@ -55,7 +55,7 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
                     // rtp_packetizer_encode(&pc->video_rtx_packetizer, frame->packet, frame->bytes);
                     // ret = peer_connection_encrypt_send(pc, frame->packet, frame->bytes);
                 } else {
-                    JLOG_ERROR("resend key[%d:%d] is not found!", key.ssrc, key.seq);
+                    JLOG_ERROR("rtx key[%d:%d] is not found!", key.ssrc, key.seq);
                     // rtp_list_print_all(&pc->rtp_tx_cache_list, 0);
                     notfound_key = key;
                 }
@@ -324,10 +324,10 @@ extern void mqtt_candidate_publish(char *sdp_content);
 static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user_ptr) {
     peer_connection_t *pc = user_ptr;
     // Filter server reflexive candidates
-    // if (strstr(sdp, "srflx") || strstr(sdp, "host"))
-    //     return;
-    if (strstr(sdp, "host"))
+    if (strstr(sdp, "srflx") || strstr(sdp, "host"))
         return;
+    // if (strstr(sdp, "host"))
+    //     return;
     JLOG_INFO("%s candidate: %s", pc->name, sdp);
 
     mqtt_candidate_publish((char *)&sdp[2]);
@@ -683,10 +683,11 @@ int peer_connection_send_audio(peer_connection_t *pc, const uint8_t *buf, size_t
 int peer_connection_encrypt_send(peer_connection_t *pc, char *packet, int bytes) {
     int ret = JUICE_ERR_FAILED;
 
-    if (dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes) == srtp_err_status_ok) {
+    ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
+    if (ret == srtp_err_status_ok) {
         ret = juice_send(pc->juice_agent, packet, bytes);
     } else {
-        JLOG_ERROR("dtls_srtp_encrypt_rtp_packet error");
+        JLOG_ERROR("dtls_srtp_encrypt_rtp_packet %d error: %d", bytes, ret);
     }
     return ret;
 }
