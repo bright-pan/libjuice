@@ -54,8 +54,6 @@ typedef struct {
 
 } rtp_header_t;
 
-#define RTP_PACKETIZER_BUF_SIZE (CONFIG_MTU + sizeof(rtp_header_t) * 2)
-
 typedef struct {
 
     rtp_header_t header;

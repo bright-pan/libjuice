@@ -189,9 +189,15 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         }
     } else if (strstr(argv[1], "rtp_stats")) {
         if (argc == 2) {
-            JLOG_INFO("rtp_tx_cache_list count:%d", rtp_list_count(&pc->rtp_tx_cache_list));
-            JLOG_INFO("rtp_rtx_cache_list count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
-            JLOG_INFO("rtp_recv_cache_list count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
+            JLOG_INFO("rtp_tx_cache_list count[%d:%d], memused:[%d:%d]KB",
+                      rtp_list_count(&pc->rtp_tx_cache_list), pc->rtp_tx_cache_list.max_size,
+                      rtp_list_memused(&pc->rtp_tx_cache_list) / 1000, rtp_list_memused_max_size(&pc->rtp_tx_cache_list) / 1000);
+            JLOG_INFO("rtp_rtx_cache_list count[%d:%d], memused:[%d:%d]KB",
+                      rtp_list_count(&pc->rtp_rtx_cache_list), pc->rtp_rtx_cache_list.max_size,
+                      rtp_list_memused(&pc->rtp_rtx_cache_list) / 1000, rtp_list_memused_max_size(&pc->rtp_rtx_cache_list) / 1000);
+            JLOG_INFO("rtp_recv_cache_list count[%d:%d], memused:[%d:%d]KB",
+                      rtp_list_count(&pc->rtp_recv_cache_list), pc->rtp_recv_cache_list.max_size,
+                      rtp_list_memused(&pc->rtp_recv_cache_list) / 1000, rtp_list_memused_max_size(&pc->rtp_recv_cache_list) / 1000);
         } else {
             JLOG_ERROR("Usage: %s rtp_stats\n", argv[0]);
         }

@@ -568,10 +568,14 @@ static void *rtp_audio_dec_thread_entry(void *param) {
                     rtp_packet = (rtp_packet_t *)frame->packet;
                     if (rtp_packet->header.type == RTP_PAYLOAD_TYPE_PCMA) {
                         rtp_payload_len = frame->bytes - sizeof(rtp_packet_t);
+                        if (rtp_payload_len > PCM_PLAY_HW_PARAMS_PERIOD_SIZE - pcm_play_period_size) {
+                            // decode length is not overflow for pcm_play_buffer
+                            rtp_payload_len = PCM_PLAY_HW_PARAMS_PERIOD_SIZE - pcm_play_period_size;
+                        }
                         // decode g711a to pcm16
                         alaw_to_pcm16(rtp_payload_len, (char *)rtp_packet->payload, pcm_play_buffer + pcm_play_period_size * 2);
                         if (pcm_play_period_size + rtp_payload_len >= PCM_PLAY_HW_PARAMS_PERIOD_SIZE) {
-                            pcm_play_period_size = 0;
+                            pcm_play_period_size = 0; // reset
                             ret = aos_pcm_writei(audio->pcm->handle, pcm_play_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
                             aos_pcm_write_wait_complete(audio->pcm->handle, 100);
                             if(ret < 0) {

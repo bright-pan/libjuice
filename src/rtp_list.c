@@ -24,7 +24,13 @@ rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, in
         frame->bytes = bytes;
         frame->type = type;
         frame->ts = current_timestamp();
-        frame->packet = uthash_malloc(bytes);
+        if (bytes <= RTP_FRAME_PACKET_MAX_SIZE) {
+            frame->packet = uthash_malloc(bytes);
+        } else {
+            frame->packet = NULL;
+            JLOG_ERROR("rtp_frame_malloc type:%d, ssrc:%d, seq:%d, bytes:%d > RTP_FRAME_MAX_SIZE:%d",
+                       type, ssrc, seq, bytes, RTP_FRAME_PACKET_MAX_SIZE);
+        }
         if (frame->packet) {
             memcpy(frame->packet, packet, bytes);
         } else {
@@ -65,6 +71,14 @@ void rtp_list_init(rtp_list_t *rtp_list, int size) {
     if (rwlock_init(&rtp_list->rwlock) != 0) {
         JLOG_FATAL("can't create rwlock");
     }
+}
+
+int rtp_list_memused_max_size(rtp_list_t *rtp_list) {
+    return rtp_list->max_size * (sizeof(rtp_frame_t) + RTP_FRAME_PACKET_MAX_SIZE);
+}
+
+int rtp_list_memused(rtp_list_t *rtp_list) {
+    return HASH_COUNT(rtp_list->utlist) * (sizeof(rtp_frame_t) + RTP_FRAME_PACKET_MAX_SIZE);
 }
 
 int rtp_list_rlock(rtp_list_t *rtp_list) {

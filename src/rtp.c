@@ -223,7 +223,7 @@ static int rtp_packetizer_encode_generic(rtp_packetizer_t *rtp_packetizer, uint8
     rtp_packetizer->timestamp += size; // 8000 HZ.
     rtp_header->timestamp = htonl(rtp_packetizer->timestamp);
     rtp_header->ssrc = htonl(rtp_packetizer->ssrc);
-    if (size <= RTP_PAYLOAD_SIZE) {
+    if (size <= RTP_PACKETIZER_BUF_SIZE) {
         memcpy(rtp_packetizer->buf + sizeof(rtp_header_t), buf, size);
         rtp_packetizer->on_packet((char *)rtp_packetizer->buf, size + sizeof(rtp_header_t), rtp_packetizer->user_data);
         ret = 0;

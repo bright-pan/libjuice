@@ -55,6 +55,9 @@ typedef struct {
 rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, int bytes);
 void rtp_frame_free(rtp_frame_t *frame);
 
+int rtp_list_memused(rtp_list_t *rtp_list);
+int rtp_list_memused_max_size(rtp_list_t *rtp_list);
+
 void rtp_list_init(rtp_list_t *rtp_list, int size);
 int rtp_list_rlock(rtp_list_t *rtp_list);
 int rtp_list_wlock(rtp_list_t *rtp_list);
