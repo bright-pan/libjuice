@@ -367,13 +367,18 @@ static void rtp_recv_packet_process(peer_connection_t *pc, char *packet, int byt
 static void agent_on_recv(juice_agent_t *agent, const char *data, size_t size, void *user_ptr) {
     int ret;
     peer_connection_t *pc = user_ptr;
+
+    char buf[BUFFER_SIZE];
+
+    memcpy(buf, data, size);
+
     if((data[0]>=128) && (data[0]<=191)) {
-        rtp_recv_packet_process(pc, (char *)data, size);
+        rtp_recv_packet_process(pc, buf, size);
         return;
     }
     if((data[0]>=20)  && (data[0]<=64)) {
         // JLOG_INFO( "%s recv dtls: %ld", pc->name, size);
-        packet_fifo_write(&pc->dtls_fifo, (char *)data, size);
+        packet_fifo_write(&pc->dtls_fifo, buf, size);
         return;
     }
 
@@ -673,12 +678,16 @@ int peer_connection_send_audio(peer_connection_t *pc, const uint8_t *buf, size_t
 
 int peer_connection_encrypt_send(peer_connection_t *pc, char *packet, int bytes) {
     int ret = JUICE_ERR_FAILED;
+    char buf[BUFFER_SIZE];
+    int size = bytes;
 
-    ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, (char *)packet, &bytes);
+    memcpy(buf, packet, size);
+
+    ret = dtls_srtp_encrypt_rtp_packet(&pc->dtls_srtp, buf, &size);
     if (ret == srtp_err_status_ok) {
-        ret = juice_send(pc->juice_agent, packet, bytes);
+        ret = juice_send(pc->juice_agent, buf, size);
     } else {
-        JLOG_ERROR("dtls_srtp_encrypt_rtp_packet %d error: %d", bytes, ret);
+        JLOG_ERROR("dtls_srtp_encrypt_rtp_packet %d error: %d", size, ret);
     }
     return ret;
 }
