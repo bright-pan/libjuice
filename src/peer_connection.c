@@ -536,9 +536,9 @@ static void peer_connection_state_start(peer_connection_t *pc) {
 
     packet_fifo_reset(&pc->dtls_fifo);
 
-    rtp_list_init(&pc->rtp_rtx_cache_list);
-    rtp_list_init(&pc->rtp_tx_cache_list);
-    rtp_list_init(&pc->rtp_recv_cache_list);
+    rtp_list_init(&pc->rtp_tx_cache_list, RTP_TX_CACHE_LIST_MAX_SIZE);
+    rtp_list_init(&pc->rtp_rtx_cache_list, RTP_RTX_CACHE_LIST_MAX_SIZE);
+    rtp_list_init(&pc->rtp_recv_cache_list, RTP_RECV_CACHE_LIST_MAX_SIZE);
 
     STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }
@@ -628,7 +628,7 @@ void *loop_thread_entry(void *param) {
             default:
             break;
         }
-        usleep(1*1000);
+        usleep(5*1000);
     }
     pthread_exit(&ret);
     return NULL;

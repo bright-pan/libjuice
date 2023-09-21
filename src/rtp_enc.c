@@ -562,7 +562,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
 
     while (1) {
         if (pc->rtp_audio_dec_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
-            if (rtp_list_count(&pc->rtp_recv_cache_list) >= RTP_AUDIO_DEC_PERIOD_PACKET_SIZE) {
+            if (rtp_list_count(&pc->rtp_recv_cache_list) > 0) {
                 HASH_ITER(hh, pc->rtp_recv_cache_list.utlist, frame, tmp) {
                     // process rtp packet
                     rtp_packet = (rtp_packet_t *)frame->packet;
@@ -583,7 +583,6 @@ static void *rtp_audio_dec_thread_entry(void *param) {
                         } else {
                             pcm_play_period_size += rtp_payload_len;
                         }
-
                     } else {
                         JLOG_ERROR("rtp_audio_dec payload type is not PCMA/G711A, type:%d, length:%d", rtp_packet->header.type, rtp_payload_len);
                     }

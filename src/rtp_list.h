@@ -48,19 +48,19 @@ typedef struct {
 
 typedef struct {
     rtp_frame_t *utlist;
+    int max_size;
     rwlock_t rwlock;
 } rtp_list_t;
 
 rtp_frame_t *rtp_frame_malloc(int type, uint32_t ssrc, int seq, void *packet, int bytes);
 void rtp_frame_free(rtp_frame_t *frame);
 
-void rtp_list_init(rtp_list_t *rtp_list);
+void rtp_list_init(rtp_list_t *rtp_list, int size);
 int rtp_list_rlock(rtp_list_t *rtp_list);
 int rtp_list_wlock(rtp_list_t *rtp_list);
 void rtp_list_unlock(rtp_list_t *rtp_list);
 
-int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size);
-#define rtp_list_insert(list, frame) rtp_list_insert_ex(list, frame, RTP_LIST_MAX_SIZE)
+int rtp_list_insert(rtp_list_t *rtp_list, rtp_frame_t *frame);
 int rtp_list_insert_packet(rtp_list_t *insert_list, void *packet, int bytes);
 void rtp_list_pop(rtp_list_t *rtp_list, rtp_frame_t *frame);
 rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key);

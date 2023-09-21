@@ -56,7 +56,7 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s send raw|dtls message\n", argv[0]);
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
-        JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_stats\n", argv[0]);
         JLOG_ERROR("Usage: %s juice_destroy\n", argv[0]);
         JLOG_ERROR("Usage: %s mem_stats\n", argv[0]);
         JLOG_ERROR("Usage: %s memp_stats all/[0-%d]\n", argv[0], MEMP_MAX);
@@ -187,11 +187,13 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         } else {
             JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         }
-    } else if (strstr(argv[1], "rtp_cache")) {
+    } else if (strstr(argv[1], "rtp_stats")) {
         if (argc == 2) {
             JLOG_INFO("rtp_tx_cache_list count:%d", rtp_list_count(&pc->rtp_tx_cache_list));
+            JLOG_INFO("rtp_rtx_cache_list count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
+            JLOG_INFO("rtp_recv_cache_list count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
         } else {
-            JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
+            JLOG_ERROR("Usage: %s rtp_stats\n", argv[0]);
         }
     } else if (strstr(argv[1], "juice_destroy")) {
         if (argc == 2) {
@@ -230,7 +232,7 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s send raw|dtls message\n", argv[0]);
         JLOG_ERROR("Usage: %s recv raw|dtls number(max=%d)\n", argv[0], BUFFER_SIZE);
         JLOG_ERROR("Usage: %s send ch si message\n", argv[0]);
-        JLOG_ERROR("Usage: %s rtp_cache\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_stats\n", argv[0]);
         JLOG_ERROR("Usage: %s juice_destroy\n", argv[0]);
         JLOG_ERROR("Usage: %s mem_stats\n", argv[0]);
         JLOG_ERROR("Usage: %s memp_stats all/[0-%d]\n", argv[0], MEMP_MAX);

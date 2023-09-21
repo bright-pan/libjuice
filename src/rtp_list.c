@@ -59,8 +59,9 @@ int rtp_list_insert_packet(rtp_list_t *insert_list, void *packet, int bytes) {
     return ret;
 }
 
-void rtp_list_init(rtp_list_t *rtp_list) {
+void rtp_list_init(rtp_list_t *rtp_list, int size) {
     rtp_list->utlist = NULL;
+    rtp_list->max_size = size;
     if (rwlock_init(&rtp_list->rwlock) != 0) {
         JLOG_FATAL("can't create rwlock");
     }
@@ -93,14 +94,14 @@ rtp_frame_t *rtp_list_find_by_key(rtp_list_t *rtp_list, rtp_frame_key_t key) {
     return s;
 }
 
-int rtp_list_insert_ex(rtp_list_t *rtp_list, rtp_frame_t *frame, int size) {
+int rtp_list_insert(rtp_list_t *rtp_list, rtp_frame_t *frame) {
     int ret = -1;
     rtp_frame_t *s = NULL;
 
     if (frame) {
         if (rwlock_wlock(&rtp_list->rwlock) == 0) {
             HASH_FIND(hh, rtp_list->utlist, &frame->key, sizeof(rtp_frame_key_t), s);
-            if (s == NULL && HASH_COUNT(rtp_list->utlist) > size) {
+            if (s == NULL && HASH_COUNT(rtp_list->utlist) > rtp_list->max_size) {
                 s = rtp_list->utlist;
             }
             if (s) {
@@ -226,7 +227,7 @@ int test_rtplist(int argc, char **argv) {
     rtp_frame_key_t key;
     int temp;
     if (argc < 2) {
-        printf("%s 0 - list initial\n", argv[0]);
+        printf("%s 0 size - list initial\n", argv[0]);
         printf("%s 1 ssrc frame size - add frame size\n", argv[0]);
         printf("%s 2 ssrc seq frame size - add or rename frame by id\n", argv[0]);
         printf("%s 3 ssrc seq - find frame\n", argv[0]);
@@ -239,7 +240,7 @@ int test_rtplist(int argc, char **argv) {
     } else {
         switch (atoi(argv[1])) {
             case 0:
-                rtp_list_init(&test_list);
+                rtp_list_init(&test_list, atoi(argv[2]));
                 break;
             case 1:
                 s = rtp_frame_malloc(0, atoi(argv[2]), id++, argv[3], atoi(argv[4]));
