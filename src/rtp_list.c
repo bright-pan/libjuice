@@ -115,18 +115,12 @@ int rtp_list_insert(rtp_list_t *rtp_list, rtp_frame_t *frame) {
     if (frame) {
         if (rwlock_wlock(&rtp_list->rwlock) == 0) {
             HASH_FIND(hh, rtp_list->utlist, &frame->key, sizeof(rtp_frame_key_t), s);
-            if (s == NULL && HASH_COUNT(rtp_list->utlist) > rtp_list->max_size) {
-                s = rtp_list->utlist;
+            if (s == NULL && HASH_COUNT(rtp_list->utlist) < rtp_list->max_size) {
+                HASH_ADD(hh, rtp_list->utlist, key, sizeof(rtp_frame_key_t), frame);
+                ret = 0;
             }
-            if (s) {
-                HASH_DEL(rtp_list->utlist, s);  /* frame: pointer to delete */
-                uthash_free(s->packet, 0);
-                uthash_free(s, 0);
-            }
-            HASH_ADD(hh, rtp_list->utlist, key, sizeof(rtp_frame_key_t), frame);
             rwlock_unlock(&rtp_list->rwlock);
         }
-        ret = 0;
     }
     return ret;
 }

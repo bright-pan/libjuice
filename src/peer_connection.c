@@ -44,7 +44,7 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
                 if (frame) {
                     ret = rtp_list_insert_packet(&pc->rtp_rtx_cache_list, frame->packet, frame->bytes);
                     if (ret < 0) {
-                        JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
+                        JLOG_ERROR("insert rtp_rtx_cache_list error, count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
                     }
                     JLOG_INFO("rtx packet ssrc: %d seq: %d, length: %d", ssrc, seq,  frame->bytes);
                     // rtx

@@ -434,7 +434,7 @@ static void rtp_enc_packetizer_callback(char *packet, int bytes, void *user_data
     if (((rtp_header_t *)packet)->type == RTP_PAYLOAD_TYPE_H264) {
         ret = rtp_list_insert_packet(&pc->rtp_tx_cache_list, packet, bytes);
         if (ret < 0) {
-            JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_tx_cache_list));
+            JLOG_ERROR("insert rtp_tx_cache_list error, count:%d", rtp_list_count(&pc->rtp_tx_cache_list));
         }
     }
     // send
