@@ -39,7 +39,8 @@ static void udp_task_entry(void *param) {
         //等待客户端发送数据
         n = recvfrom(sockfd, ReadBuff, BUFF_SIZE, 0,
                      (struct sockaddr *)&remote_addr, &remote_addr_len);
-        JLOG_INFO_DUMP_HEX(ReadBuff, n, "recvfrom: %s:%d", inet_ntoa(remote_addr.sin_addr.s_addr), remote_addr.sin_port);
+        // JLOG_INFO_DUMP_HEX(ReadBuff, n, "recvfrom: %s:%d", inet_ntoa(remote_addr.sin_addr.s_addr), remote_addr.sin_port);
+        JLOG_INFO("recvfrom: %s:%d, size=%d", inet_ntoa(remote_addr.sin_addr.s_addr), remote_addr.sin_port, n);
     }
 }
 

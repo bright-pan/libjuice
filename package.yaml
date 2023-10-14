@@ -83,6 +83,7 @@ source_file:
   - "src/utils.c"
   - "src/rtp_enc.c"
   - "src/audio_demo.c"
+  - "src/pipe.c"
   - "test/*.c"
 
 ## 第五部分：配置信息

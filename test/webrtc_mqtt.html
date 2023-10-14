@@ -21,6 +21,7 @@
 
     <base target="_blank">
 
+    <script src="http://192.168.1.186:8000/js/sdp.js"></script>
     <script src="http://192.168.1.186:8000/js/mqtt.min.js"></script>
     <title>Transmit text (between two tabs)</title>
     <style>
@@ -110,16 +111,17 @@
 
 
             local_view = document.getElementById('local_id');
-            local_view.value = "W_1V1_SWQ00001_1V1_00:FF:AF:CD:97:21"
+            local_view.value = "D-15JEvX-2Q3rY3Uk-7C:DF:A1:FF:FF:FF"
             remote_view = document.getElementById('remote_id');
-            remote_view.value = "D_1V1_SWQ00001_1V1_00:FF:AF:CD:97:21"
+            remote_view.value = "D-15JEvX-2Q3rY3Uk-7C:DF:A1:F2:13:18"
 
-            // const host = 'ws://broker.emqx.io:8083/mqtt'
-            const host = 'ws://122.114.60.74:8083/mqtt'
+            const host = 'wss://iot.test.funlink.cloud:8183/mqtt'
+            // const host = 'ws://122.114.60.74:8083/mqtt'
+
             // const host = 'ws://192.168.12.193:8080/mqtt'
             // const host = 'ws://mqtt.eclipseprojects.io:80/mqtt'
 
-            const webrtc_topic_prefix = '/webrtc/'
+            const webrtc_topic_prefix = 'webrtc/'
 
             const configuration = {
                 // sdpSemantics: 'plan-b',
@@ -193,6 +195,7 @@
                 // iceRestart: restartInput.checked,
                 // voiceActivityDetection: vadInput.checked
             };
+            // let offer_sdp;
 
             function handleSuccess(stream) {
                         const audioTracks = stream.getAudioTracks();
@@ -232,8 +235,10 @@
                     connectTimeout: 30 * 1000,
                     // Authentication information
                     clientId: local_view.value,
-                    username: 'nanmu0001',
-                    password: 'nanmu0001!@#$%',
+                    // username: 'nanmu0001',
+                    // password: 'nanmu0001!@#$%',
+                    username: '15JEvX-2Q3rY3Uk-7C:DF:A1:FF:FF:FF',
+                    password: 's/Y5FosgfCvBL+24d8n5E6aR3gcnvBMtZvO+QI/3ehltHJc65wlIrCCfb2qJ4fHL',
                     will: {
                         topic: 'WillMsg',
                         payload: 'Connection Closed abnormally..!',
@@ -314,12 +319,39 @@
                 console.log(`Failed to set session description: ${error.toString()}`);
             }
 
+            function fmtp_filter(item) {
+                item.config.search('level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f') != -1
+            }
             function onCreateOfferSuccess(desc) {
                 console.log(`Offer from pc\n${desc.sdp}`);
+                res = sdpTransform.parse(desc.sdp);
+                delete res.extmapAllowMixed
+                // audio
+                delete res.media[0].ext
+                delete res.media[0].rtcpFb
+                delete res.media[0].fmtp
+                delete res.media[0].msid
+                delete res.media[0].ssrcs
+                res.media[0].rtp = res.media[0].rtp.filter(v=>v.codec=='PCMA')
+                payloads = res.media[0].rtp.map((item) => item.payload)
+                res.media[0].payloads = payloads.join(' ')
+
+                //video
+                delete res.media[1].ext
+                // res.media[1].rtp = res.media[1].rtp.filter(v=>v.codec=='H264')
+                fmtp = res.media[1].fmtp.filter(item=>item.config.search('level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f') != -1)
+                p = fmtp.map((item) => item.payload)[0]
+                payloads = [p, p+1]
+                res.media[1].fmtp= res.media[1].fmtp.filter(item=>payloads.includes(item.payload))
+                res.media[1].rtcpFb= res.media[1].rtcpFb.filter(item=>payloads.includes(item.payload))
+                res.media[1].rtp= res.media[1].rtp.filter(item=>payloads.includes(item.payload))
+                res.media[1].payloads = payloads.join(' ')
+                offer_sdp = sdpTransform.write(res);
+                console.log(`Offer filter\n${offer_sdp}`);
                 console.log('pc setLocalDescription start');
                 pc.setLocalDescription(desc).then(() => onSetLocalSuccess(pc), onSetSessionDescriptionError);
                 // console.log({ type: 'offer', sdp: offer.sdp })
-                remote_PostMessage({ type: 'offer', sdp: desc.sdp });
+                remote_PostMessage({ type: 'offer', sdp: offer_sdp, client: local_view.value});
             }
             function onSetLocalSuccess(pc) {
                 console.log(`pc setLocalDescription complete`);
@@ -332,10 +364,10 @@
                 startButton.disabled = true;
                 closeButton.disabled = false;
 
-                sendChannel = pc.createDataChannel('sendDataChannel');
-                sendChannel.onopen = onSendChannelStateChange;
-                sendChannel.onmessage = onSendChannelMessageCallback;
-                sendChannel.onclose = onSendChannelStateChange;
+                // sendChannel = pc.createDataChannel('sendDataChannel');
+                // sendChannel.onopen = onSendChannelStateChange;
+                // sendChannel.onmessage = onSendChannelMessageCallback;
+                // sendChannel.onclose = onSendChannelStateChange;
                 localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
                 console.log('Adding Local Stream to peer connection');
                 console.log('createOffer start');

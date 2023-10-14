@@ -66,7 +66,8 @@ typedef struct peer_connect {
     void (*cb_track)(uint8_t *packet, size_t bytes, void *user_data);
     void (*cb_connected)(void *userdata);
     void (*cb_receiver_packet_loss)(uint32_t ssrc, float fraction_loss, uint32_t total_loss, void *user_data);
-
+    void (*cb_push_answer)(char *sdp_content, void *userdata);
+    void (*cb_push_candidate)(char *sdp_content, void *userdata);
     void *user_data;
 
     // uint8_t temp_buf[CONFIG_MTU];
@@ -199,6 +200,8 @@ void peer_connection_set_current_ip(const char *ip);
 void peer_options_set_default(peer_options_t *options, int port_begin, int port_end);
 int peer_connection_encrypt_send(peer_connection_t *pc, char *packet, int bytes);
 
+void peer_connection_set_cb_push_answer(peer_connection_t *pc, void (*on_push_answer)(char *sdp_content, void *userdata));
+void peer_connection_set_cb_push_candidate(peer_connection_t *pc, void (*on_push_candidate)(char *sdp_content, void *userdata));
 // void peer_connection_reset_video_fifo(peer_connection_t *pc);
 #ifdef __cplusplus
 }

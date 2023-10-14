@@ -1,9 +1,10 @@
 //#include "test_config.h"
+#include <cJSON.h>
 #include "peer_connection.h"
 #include "udp.h"
 #include "rtp_enc.h"
+#include "pipe.h"
 #include "log.h"
-#include <cJSON.h>
 
 #if defined(AOS_COMP_CLI)
 #include <aos/cli.h>
@@ -22,6 +23,32 @@ peer_options_t server_options, client_options;
 static void on_channel_msg(char *msg, size_t len, uint16_t si, void *userdata) {
     peer_connection_t *pc = (peer_connection_t *)userdata;
     JLOG_INFO("%s channel %d msg(%d): %s", pc->name, si, len, msg);
+}
+
+static void on_pipe_push_answer(char *sdp_content, void *userdata) {
+    peer_connection_t *pc = (peer_connection_t *)userdata;
+    JLOG_INFO("%s answer: %s", pc->name, sdp_content);
+    cJSON *signal = cJSON_CreateObject();
+    cJSON_AddStringToObject(signal, "type", "answer");
+    cJSON_AddStringToObject(signal, "sdp", sdp_content);
+    char *signal_string = cJSON_Print(signal);
+    pipe_send(signal_string, strlen(signal_string));
+    // aos_msleep(1000);
+    cJSON_Delete(signal);
+}
+
+static void on_pipe_push_candidate(char *sdp_content, void *userdata) {
+    peer_connection_t *pc = (peer_connection_t *)userdata;
+    JLOG_INFO("%s candidate: %s", pc->name, sdp_content);
+    cJSON *signal = cJSON_CreateObject();
+    cJSON_AddStringToObject(signal, "type", "candidate");
+    cJSON_AddStringToObject(signal, "candidate", sdp_content);
+    cJSON_AddNumberToObject(signal, "sdpMLineIndex", 0);
+    cJSON_AddStringToObject(signal, "sdpMid", "0");
+    char *signal_string = cJSON_Print(signal);
+    pipe_send(signal_string, strlen(signal_string));
+    // aos_msleep(1000);
+    cJSON_Delete(signal);
 }
 
 static void on_channel_open(void *userdata) {
@@ -64,11 +91,14 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
     }
 
     if (strstr(argv[1], "create")) {
+        pipe_create("pipe_client", pc);
         peer_options_set_default(po, 57000, 58000);
         peer_connection_configure(pc, pc_name, role, po);
         peer_connection_set_cb_state_change(pc, on_state_change);
         peer_connection_set_datachannel_cb(pc, pc, on_channel_msg, on_channel_open, on_channel_close);
         peer_connection_set_cb_receiver_packet_loss(pc, on_receiver_packet_loss);
+        peer_connection_set_cb_push_answer(pc, on_pipe_push_answer);
+        peer_connection_set_cb_push_candidate(pc, on_pipe_push_candidate);
         peer_connection_init(pc);
     } else if (strstr(argv[1], "start")) {
             peer_connection_start(pc);

@@ -325,7 +325,8 @@ static void agent_on_candidate(juice_agent_t *agent, const char *sdp, void *user
     //     return;
     JLOG_INFO("%s candidate: %s", pc->name, sdp);
 
-    mqtt_candidate_publish((char *)&sdp[2]);
+    // mqtt_candidate_publish();
+    pc->cb_push_candidate((char *)&sdp[2], pc);
     // sdp_append(&pc->local_sdp, sdp);
     // Agent: Receive it from agent
     // juice_add_remote_candidate(agent, sdp);
@@ -532,7 +533,6 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     }
 
     JLOG_INFO("%s local description:\n%s\n", pc->name, pc->local_sdp.content);
-    mqtt_answer_publish(pc->local_sdp.content);
     pc->b_offer_created = 1;
 
     if (pc->cb_candidate) {
@@ -544,8 +544,6 @@ static void peer_connection_state_start(peer_connection_t *pc) {
     rtp_list_init(&pc->rtp_tx_cache_list, RTP_TX_CACHE_LIST_MAX_SIZE);
     rtp_list_init(&pc->rtp_rtx_cache_list, RTP_RTX_CACHE_LIST_MAX_SIZE);
     rtp_list_init(&pc->rtp_recv_cache_list, RTP_RECV_CACHE_LIST_MAX_SIZE);
-
-    STATE_CHANGED(pc, PEER_CONNECTION_INIT);
 }
 
 void *loop_thread_entry(void *param) {
@@ -566,6 +564,16 @@ void *loop_thread_entry(void *param) {
                 // if (!pc->b_offer_created) {
                 //   peer_connection_state_new(pc);
                 // }
+                // send answer
+                if (pc->cb_push_answer) {
+                    pc->cb_push_answer(pc->local_sdp.content, pc);
+                    // mqtt_answer_publish(pc->local_sdp.content);
+                    // switch to PEER_CONNECTION_INIT
+                    STATE_CHANGED(pc, PEER_CONNECTION_INIT);
+
+                } else {
+                    JLOG_ERROR("cb_push_answer is NULL");
+                }
                 break;
             }
             case PEER_CONNECTION_CONNECTING: {
@@ -633,7 +641,7 @@ void *loop_thread_entry(void *param) {
             default:
             break;
         }
-        usleep(5*1000);
+        usleep(1*1000);
     }
     pthread_exit(&ret);
     return NULL;
@@ -769,6 +777,16 @@ int peer_connection_send_rtcp_pil(peer_connection_t *pc, uint32_t ssrc) {
 }
 
 // callbacks
+void peer_connection_set_cb_push_answer(peer_connection_t *pc, void (*on_push_answer)(char *sdp_content, void *userdata)) {
+
+  pc->cb_push_answer = on_push_answer;
+}
+
+void peer_connection_set_cb_push_candidate(peer_connection_t *pc, void (*on_push_candidate)(char *sdp_content, void *userdata)) {
+
+  pc->cb_push_candidate = on_push_candidate;
+}
+
 void peer_connection_set_cb_connected(peer_connection_t *pc, void (*on_connected)(void *userdata)) {
 
   pc->cb_connected = on_connected;

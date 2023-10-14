@@ -28,13 +28,13 @@ static void udp_task_entry(void *param) {
         JLOG_ERROR("Socket error\n");
     }
     //填充地址信息
-    local_addr.sin_family = AF_INET;
-    local_addr.sin_port = htons(LOCAL_PORT);
-    local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    // local_addr.sin_family = AF_INET;
+    // local_addr.sin_port = htons(LOCAL_PORT);
+    // local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    //绑定socket
-    ret = bind(sockfd, (struct sockaddr *)&local_addr, sizeof(local_addr));
-    JLOG_INFO("bind: %s:%d, ret=%d", inet_ntoa(local_addr.sin_addr.s_addr), LOCAL_PORT, ret);
+    // //绑定socket
+    // ret = bind(sockfd, (struct sockaddr *)&local_addr, sizeof(local_addr));
+    // JLOG_INFO("bind: %s:%d, ret=%d", inet_ntoa(local_addr.sin_addr.s_addr), LOCAL_PORT, ret);
     remote_addr_len = sizeof(remote_addr);
 
     while (1) {
@@ -42,6 +42,7 @@ static void udp_task_entry(void *param) {
         n = recvfrom(sockfd, ReadBuff, BUFF_SIZE, 0,
                      (struct sockaddr *)&remote_addr, &remote_addr_len);
         JLOG_INFO_DUMP_HEX( ReadBuff, n, "recvfrom: %s:%d", inet_ntoa(remote_addr.sin_addr.s_addr), remote_addr.sin_port);
+        // JLOG_INFO("recvfrom: %s:%d, size=%d", inet_ntoa(remote_addr.sin_addr.s_addr), remote_addr.sin_port, n);
     }
 }
 
