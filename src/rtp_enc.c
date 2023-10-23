@@ -315,23 +315,25 @@ static void audio_3a_init(audio_t *audio)
     pstVqeConfig->s32WorkSampleRate = capture_rate;
     pstVqeConfig->s32RevMask = 0;
     pstVqeConfig->para_notch_freq = 0;
+
     /* AEC */
     pstVqeConfig->stAecCfg.para_aec_filter_len = 13;
     pstVqeConfig->stAecCfg.para_aes_std_thrd = 37;
     pstVqeConfig->stAecCfg.para_aes_supp_coeff = 60;
+
+    pstVqeConfig->stAecDelayCfg.para_aec_init_filter_len = 13;
+    pstVqeConfig->stAecDelayCfg.para_dg_target = 6;
+    pstVqeConfig->stAecDelayCfg.para_delay_sample = 1;
+
     /* ANR */
     pstVqeConfig->stAnrCfg.para_nr_snr_coeff = 15;
-    pstVqeConfig->stAnrCfg.para_nr_init_sile_time = 0;
+    pstVqeConfig->stAnrCfg.para_nr_init_sile_time = 100;
 
     /* AGC */
     pstVqeConfig->stAgcCfg.para_agc_max_gain = 0;
     pstVqeConfig->stAgcCfg.para_agc_target_high = 2;
     pstVqeConfig->stAgcCfg.para_agc_target_low = 72;
     pstVqeConfig->stAgcCfg.para_agc_vad_ena = 1;
-
-    pstVqeConfig->stAecDelayCfg.para_aec_init_filter_len = 1;
-    pstVqeConfig->stAecDelayCfg.para_dg_target = 1;
-    pstVqeConfig->stAecDelayCfg.para_delay_sample = 1;
 
     CviAud_Algo_GetVersion(pstrVersion);
     JLOG_INFO("[cvi3aVersion:%s]\n", pstrVersion);
