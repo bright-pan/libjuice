@@ -304,7 +304,7 @@ static int venc_process_stream(peer_connection_t *pc, VENC_STREAM_S *pstream)
 static void audio_3a_init(audio_t *audio)
 {
     char pstrVersion[52];
-    int channel = audio->pcm->channel;/* only support 2chn*/
+    int channel = 2;/* only support 2chn*/
     int capture_rate = audio->pcm->rate;
     int AecLenByte = 0;
 
@@ -324,12 +324,12 @@ static void audio_3a_init(audio_t *audio)
     pstVqeConfig->stAnrCfg.para_nr_init_sile_time = 0;
 
     /* AGC */
-    pstVqeConfig->stAgcCfg.para_agc_max_gain = 3;
+    pstVqeConfig->stAgcCfg.para_agc_max_gain = 0;
     pstVqeConfig->stAgcCfg.para_agc_target_high = 2;
-    pstVqeConfig->stAgcCfg.para_agc_target_low = 6;
-    pstVqeConfig->stAgcCfg.para_agc_vad_ena = 0;
+    pstVqeConfig->stAgcCfg.para_agc_target_low = 72;
+    pstVqeConfig->stAgcCfg.para_agc_vad_ena = 1;
 
-    pstVqeConfig->stAecDelayCfg.para_aec_init_filter_len = 2;
+    pstVqeConfig->stAecDelayCfg.para_aec_init_filter_len = 1;
     pstVqeConfig->stAecDelayCfg.para_dg_target = 1;
     pstVqeConfig->stAecDelayCfg.para_delay_sample = 1;
 
@@ -362,23 +362,23 @@ static void audio_play_init(audio_t *audio) {
     Lango_Set_AudioOutVol(30, 30);
 }
 
-static int audio_mono2stereo(audio_t *audio, const short *src_audio, short *dst_audio, int size)
+static int audio_mono2stereo(const short *src_audio, int frames, short *dst_audio)
 {
-    for (int i = 0; i < size; i++)
+    for (int i = 0; i < frames; i++)
     {
-        for (int channel_num = 0; channel_num < audio->pcm->channel; channel_num++)
-            dst_audio[audio->pcm->channel * i + channel_num] = src_audio[i];
+        dst_audio[2 * i] = src_audio[i];
+        dst_audio[2 * i + 1] = src_audio[i];
     }
-    return size;
+    return frames;
 }
 
-static int audio_stereo2mono(audio_t *audio, const short *src_audio, short *dst_audio, int size, int channel_num)
+static int audio_stereo2mono(const short *src_audio, int frames, short *dst_audio, int channel_num)
 {
-    for (int i = 0; i < size; i++)
+    for (int i = 0; i < frames; i++)
     {
-        dst_audio[i] = src_audio[i * audio->pcm->channel + channel_num];
+        dst_audio[i] = src_audio[i * 2 + channel_num];
     }
-    return size;
+    return frames;
 }
 
 static void audio_3a_process(audio_t *audio, char *pMicIn,int frameSize ,char *pMicOut,int frameDataSize)
@@ -415,7 +415,7 @@ static void audio_3a_process(audio_t *audio, char *pMicIn,int frameSize ,char *p
             }
         }
 
-        audio_mono2stereo(audio, audio->dataout, sAudioData, CVIAUDIO_AEC_LENGTH);//left short + right short = len*2 short
+        audio_mono2stereo(audio->dataout, CVIAUDIO_AEC_LENGTH, sAudioData);//left short + right short = len*2 short
         #else
         memcpy((char*)&sAudioData[0],(char*)&pMicIn[doDataIndex],doStep);
         #endif
@@ -497,6 +497,7 @@ static void *rtp_video_enc_thread_entry(void *param) {
 }
 
 static void *rtp_audio_enc_thread_entry(void *param) {
+    int ret = 0;
     peer_connection_t *pc = param;
     audio_t *audio = &audio_capture;
     char pcm_capture_buffer[PCM_CAPTURE_HW_PARAMS_PERIOD_BYTES];
@@ -514,21 +515,24 @@ static void *rtp_audio_enc_thread_entry(void *param) {
                             now_timestamp, rtp_enc_packetizer_callback, pc);
     }
 
+    // audio demo init
+    // audio_demo_init(AUDIO_DEMO_LENGTH, AUDIO_DEMO_CHANNEL_NUM, AUDIO_DEMO_BIT_DEPTH);
+
     while (1) {
         // flags = rtmp_event_get(RTMP_EVENT_MASK);
         if (pc->rtp_audio_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             // memset(pcm_capture_buffer, 0, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
             // memset(pcm_capture_enc_buffer, 0, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
-            int ret = aos_pcm_readi(audio->pcm->handle, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
-            // int ret = pcm_read_demo((unsigned char *)pcm_capture_buffer, __2_pcm);
+            ret = aos_pcm_readi(audio->pcm->handle, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
+            // ret = audio_demo_readi((unsigned char *)pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
             if (ret > 0) {
                 // CVI 3a process
-                audio_3a_process(audio, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE);
-                audio_stereo2mono(audio, (short *)pcm_capture_buffer, (short *)pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, MIC_AUDIO_LEFT);
+                audio_3a_process(audio, pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_BYTES);
+                audio_stereo2mono((short *)pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE, (short *)pcm_capture_buffer, MIC_AUDIO_LEFT);
                 // pcm -> g711-alaw, 16bit to 8bit, mono channel
-                pcm16_to_alaw(PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES, pcm_capture_enc_buffer, pcm_capture_buffer);
+                pcm16_to_alaw(PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES, pcm_capture_buffer, pcm_capture_enc_buffer);
                 mutex_lock(&pc->packetizer_mutex);
-                rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
+                rtp_packetizer_encode(&pc->audio_packetizer, (uint8_t*)pcm_capture_enc_buffer, PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE);
                 mutex_unlock(&pc->packetizer_mutex);
                 // int buffer_size = ret * pcm->channel * (pcm->bit_depth / 8);
                 // JLOG_INFO_DUMP_HEX(pcm_capture_buffer, buffer_size, "pcm_capture_buffer: read_size=%d, buffer_size=%d", ret, buffer_size);
@@ -560,6 +564,9 @@ static void *rtp_audio_dec_thread_entry(void *param) {
     // pcm device init
     audio_play_init(audio);
 
+    // audio demo init
+    //audio_demo_init(AUDIO_DEMO_LENGTH, AUDIO_DEMO_CHANNEL_NUM, AUDIO_DEMO_BIT_DEPTH);
+
     while (1) {
         if (pc->rtp_audio_dec_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             if (rtp_list_count(&pc->rtp_recv_cache_list) > 0) {
@@ -575,17 +582,19 @@ static void *rtp_audio_dec_thread_entry(void *param) {
                         // decode g711a to pcm16
                         alaw_to_pcm16(rtp_payload_len, (char *)rtp_packet->payload, pcm_play_buffer + pcm_play_period_size * 2);
                         if (pcm_play_period_size + rtp_payload_len >= PCM_PLAY_HW_PARAMS_PERIOD_SIZE) {
-                            pcm_play_period_size = 0; // reset
                             ret = aos_pcm_writei(audio->pcm->handle, pcm_play_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
                             aos_pcm_write_wait_complete(audio->pcm->handle, 100);
                             if(ret < 0) {
-                                JLOG_ERROR("pcm_write error: ");
+                                JLOG_ERROR("pcm play error: ret=%d", ret);
                             } else {
+                                // JLOG_INFO("pcm play: period_size=%d", pcm_play_period_size);
                                 //LANGO_LOG_INFO("play audio: %d, dstlen:%d, %d", nReadSize, dstlen,
                                 //               aos_pcm_bytes_to_frames(rtmp_audio.play_handle, dstlen));
                             }
+                            pcm_play_period_size = 0; // reset
                         } else {
                             pcm_play_period_size += rtp_payload_len;
+                            // JLOG_INFO("pcm play: period_size!=%d", PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
                         }
                     } else {
                         JLOG_ERROR("rtp_audio_dec payload type is not PCMA/G711A, type:%d, length:%d", rtp_packet->header.type, rtp_payload_len);
@@ -599,7 +608,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
         }
         /*
         if (pc->rtp_audio_dec_loop_flag) {
-            ret = audio_demo_readi((unsigned char *)pcm_play_buffer);
+            ret = audio_demo_readi((unsigned char *)pcm_capture_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
             if (ret > 0) {
                 audio_stereo2mono(audio, (short *)pcm_play_buffer, (short *)pcm_play_process_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE, MIC_AUDIO_LEFT);
                 ret = aos_pcm_writei(audio->pcm->handle, pcm_play_process_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE);

@@ -342,7 +342,7 @@ static void agent_on_gathering_done(juice_agent_t *agent, void *user_ptr) {
 
 static void rtp_recv_packet_process(peer_connection_t *pc, char *packet, int bytes) {
     int ret;
-    // JLOG_INFO( "%s recv rtp: %ld", pc->name, size);
+    // JLOG_INFO( "%s recv rtp: %ld", pc->name, bytes);
     if (rtcp_packet_validate((uint8_t *)packet, bytes)) {
         ret = dtls_srtp_decrypt_rtcp_packet(&pc->dtls_srtp, packet, &bytes);
         if (ret == srtp_err_status_ok) {
@@ -359,7 +359,8 @@ static void rtp_recv_packet_process(peer_connection_t *pc, char *packet, int byt
                 // JLOG_ERROR("rtp_list_insert_packet error, count:%d", rtp_list_count(&pc->rtp_recv_cache_list));
             }
         } else {
-            JLOG_INFO_DUMP_HEX(packet, bytes, "--------------invalid[%d] rtp packet[%d]---------------", ret, bytes);
+            JLOG_INFO("--------------invalid[%d] rtp packet[%d]---------------", ret, bytes);
+            // JLOG_INFO_DUMP_HEX(packet, bytes, "--------------invalid[%d] rtp packet[%d]---------------", ret, bytes);
         }
     }
 }
@@ -609,6 +610,7 @@ void *loop_thread_entry(void *param) {
                     rtp_enc_init(pc);
                     rtp_enc_start(pc);
                     rtp_dec_init(pc);
+                    rtp_dec_start(pc);
                 }
                 break;
             }

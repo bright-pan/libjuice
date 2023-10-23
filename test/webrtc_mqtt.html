@@ -20,87 +20,318 @@
     <meta id="theme-color" name="theme-color" content="#ffffff">
 
     <base target="_blank">
-
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700" rel="stylesheet" type="text/css">
     <script src="http://192.168.1.186:8000/js/sdp.js"></script>
     <script src="http://192.168.1.186:8000/js/mqtt.min.js"></script>
     <title>Transmit text (between two tabs)</title>
     <style>
-        #buttons {
-          position:relative;
-          float:left;
-        }
-        textarea {
-          width: 400px;
-        }
-        #player {
-          position:relative;
-          width: 640px;
-          height:480px;
-          /* float:right; */
-        }
-        #sdp {
-          position:relative;
-          width: 640px;
-          height:480px;
-          /* float:right; */
-        }
-        #mainvideo {
-          position:absolute;
-          top:0;
-          left:0;
-          z-index:0;
-        }
-        #localvideo {
-          position:absolute;
-          top:0;
-          left:0;
-          z-index:1;
-        }
-        .hidden
-        {
-          display: none;
-        }
+.hidden {
+  display: none;
+}
+
+.highlight {
+  background-color: #eee;
+  font-size: 1.2em;
+  margin: 0 0 30px 0;
+  padding: 0.2em 1.5em;
+}
+
+.warning {
+  color: red;
+  font-weight: 400;
+}
+
+@media screen and (min-width: 1000px) {
+  /* hack! to detect non-touch devices */
+  div#links a {
+    line-height: 0.8em;
+  }
+}
+
+audio {
+  max-width: 100%;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  font-weight: 300;
+  margin: 0;
+  padding: 1em;
+  word-break: break-word;
+}
+
+button {
+  background-color: #d84a38;
+  border: none;
+  border-radius: 2px;
+  color: white;
+  font-family: 'Roboto', sans-serif;
+  font-size: 0.8em;
+  margin: 0 0 1em 0;
+  padding: 0.5em 0.7em 0.6em 0.7em;
+}
+
+button:active {
+  background-color: #cf402f;
+}
+
+button:hover {
+  background-color: #cf402f;
+}
+
+button[disabled] {
+  color: #ccc;
+}
+
+button[disabled]:hover {
+  background-color: #d84a38;
+}
+
+canvas {
+  background-color: #ccc;
+  max-width: 100%;
+  width: 100%;
+}
+
+textarea {
+    width: 400px;
+}
+
+code {
+  font-family: 'Roboto', sans-serif;
+  font-weight: 400;
+}
+
+div#container {
+  margin: 0 auto 0 auto;
+  max-width: 60em;
+  padding: 1em 1.5em 1.3em 1.5em;
+}
+
+div#links {
+  padding: 0.5em 0 0 0;
+}
+
+h1 {
+  border-bottom: 1px solid #ccc;
+  font-family: 'Roboto', sans-serif;
+  font-weight: 500;
+  margin: 0 0 0.8em 0;
+  padding: 0 0 0.2em 0;
+}
+
+h2 {
+  color: #444;
+  font-weight: 500;
+}
+
+h3 {
+  border-top: 1px solid #eee;
+  color: #666;
+  font-weight: 500;
+  margin: 10px 0 10px 0;
+  white-space: nowrap;
+}
+
+li {
+  margin: 0 0 0.4em 0;
+}
+
+html {
+  /* avoid annoying page width change
+  when moving from the home page */
+  overflow-y: scroll;
+}
+
+img {
+  border: none;
+  max-width: 100%;
+}
+
+input[type=radio] {
+  position: relative;
+  top: -1px;
+}
+
+p {
+  color: #444;
+  font-weight: 300;
+}
+
+p#data {
+  border-top: 1px dotted #666;
+  font-family: Courier New, monospace;
+  line-height: 1.3em;
+  max-height: 1000px;
+  overflow-y: auto;
+  padding: 1em 0 0 0;
+}
+
+p.borderBelow {
+  border-bottom: 1px solid #aaa;
+  padding: 0 0 20px 0;
+}
+
+section p:last-of-type {
+  margin: 0;
+}
+
+section {
+  border-bottom: 1px solid #eee;
+  margin: 0 0 30px 0;
+  padding: 0 0 20px 0;
+}
+
+section:last-of-type {
+  border-bottom: none;
+  padding: 0 0 1em 0;
+}
+
+select {
+  margin: 0 1em 1em 0;
+  position: relative;
+  top: -1px;
+}
+
+h1 span {
+  white-space: nowrap;
+}
+
+a {
+  color: #1D6EEE;
+  font-weight: 300;
+  text-decoration: none;
+}
+
+h1 a {
+  font-weight: 300;
+  margin: 0 10px 0 0;
+  white-space: nowrap;
+}
+
+a:hover {
+  color: #3d85c6;
+  text-decoration: underline;
+}
+
+a#viewSource {
+  display: block;
+  margin: 1.3em 0 0 0;
+  border-top: 1px solid #999;
+  padding: 1em 0 0 0;
+}
+
+div#errorMsg p {
+  color: #F00;
+}
+
+div#links a {
+  display: block;
+  line-height: 1.3em;
+  margin: 0 0 1.5em 0;
+}
+
+div.outputSelector {
+  margin: -1.3em 0 2em 0;
+}
+
+p.description {
+  margin: 0 0 0.5em 0;
+}
+
+strong {
+  font-weight: 500;
+}
+
+textarea {
+  resize: none;
+  font-family: 'Roboto', sans-serif;
+}
+
+video {
+  background: #222;
+  margin: 0 0 20px 0;
+  --width: 100%;
+  width: var(--width);
+  height: calc(var(--width) * 0.75);
+}
+
+ul {
+  margin: 0 0 0.5em 0;
+}
+
+fieldset {
+  margin: 0 0 1em 0;
+}
+
+fieldset > select {
+  margin-top: 1em;
+}
+
+@media screen and (max-width: 650px) {
+  .highlight {
+    font-size: 1em;
+    margin: 0 0 20px 0;
+    padding: 0.2em 1em;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+}
+
+@media screen and (max-width: 550px) {
+  button:active {
+    background-color: darkRed;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+}
+
+@media screen and (max-width: 450px) {
+  h1 {
+    font-size: 20px;
+  }
+}
+video {
+  margin: 0 10px 0 0;
+  width: calc(50% - 7px);
+}
+
+video:last-of-type {
+  margin-right: 0;
+}
+
+@media screen and (max-width: 400px) {
+  video {
+    margin: 0 5px 20px 0;
+    width: calc(50% - 5px);
+  }
+}
       </style>
 </head>
 
 <body>
-
     <div id="container">
-
         <h1>WebRTC Transmit text</h1>
-        <div id="buttons">
-            <div id="player">
-                <video tabindex="0" id="remotevideo" class="mainvideo" controls="controls" height="480" width="640" muted=""></video>
-                <video tabindex="0" id="localvideo" controls="controls" height="96" width="160" muted=""></video></div>
-            </div>
-            <div>
-                <button id="initButton">本地初始化</button>
-                <button id="startButton" disabled>远程呼叫</button>
-                <button id="closeButton" disabled>停止</button>
-                <button id="sendButton" disabled>发送</button>
-                <button id="switchButton">ID互换</button>
-            </div>
-            <div>
-                <h3>LOCAL ID</h3>
-                <textarea id="local_id"></textarea>
-            </div>
-            <div>
-                <h3>REMOTE ID</h3>
-                <textarea id="remote_id"></textarea>
-            </div>
-
-            <div id="sendReceive">
-                <div id="send">
-                    <h2>Send</h2>
-                    <textarea id="dataChannelSend" disabled placeholder="请输入要发送得文本...."></textarea>
-                </div>
-                <div id="receive">
-                    <h2>Receive</h2>
-                    <textarea id="dataChannelReceive" disabled></textarea>
-                </div>
-            </div>
-        </div>
-
+        <video id="remotevideo" playsinline="" controls="" autoplay=""></video>
+        <video id="localvideo" playsinline="" controls="" hidden></video>
+        <h2>Control</h3>
+        <button id="initButton">本地初始化</button>
+        <button id="startButton" disabled>远程呼叫</button>
+        <button id="closeButton" disabled>停止</button>
+        <button id="sendButton" disabled>发送</button>
+        <button id="switchButton">ID互换</button>
+        <h2>Local ID</h3>
+        <textarea id="local_id"></textarea>
+        <h2>Remote ID</h3>
+        <textarea id="remote_id"></textarea>
+        <h2>Send</h2>
+        <textarea id="dataChannelSend" disabled placeholder="请输入要发送得文本...."></textarea>
+        <h2>Receive</h2>
+        <textarea id="dataChannelReceive" disabled></textarea>
         <script>
 
             // const clientId = 'mqtt_' + Math.random().toString(16).substr(2, 8)
@@ -178,6 +409,7 @@
             const dataChannelReceive = document.querySelector('textarea#dataChannelReceive');
             const sdp_receive = document.querySelector('textarea#sdp');
 
+            let startTime;
             let pc;
             let sendChannel;
             let receiveChannel;
@@ -197,28 +429,56 @@
             };
             // let offer_sdp;
 
+
+            remotevideo.addEventListener('loadedmetadata', function() {
+                console.log(`Remote video videoWidth: ${this.videoWidth}px,  videoHeight: ${this.videoHeight}px`);
+                remotevideo_audio_tracks = this.srcObject.getAudioTracks();
+                if (remotevideo_audio_tracks.length == 0 && pc.getReceivers()[0].track.kind == 'audio') {
+                    this.srcObject.addTrack(pc.getReceivers()[0].track)
+                }
+            });
+            remotevideo.addEventListener('resize', () => {
+                console.log(`Remote video size changed to ${remotevideo.videoWidth}x${remotevideo.videoHeight} - Time since pageload ${performance.now().toFixed(0)}ms`);
+                // We'll use the first onsize callback as an indication that video has started
+                // playing out.
+                if (startTime) {
+                    const elapsedTime = window.performance.now() - startTime;
+                    console.log('Setup time: ' + elapsedTime.toFixed(3) + 'ms');
+                    startTime = null;
+                }
+            });
+            function gotRemoteStream(e) {
+                if (remotevideo.srcObject !== e.streams[0]) {
+                    remotevideo.srcObject = e.streams[0];
+                    console.log('received remote stream');
+                }
+            }
             function handleSuccess(stream) {
-                        const audioTracks = stream.getAudioTracks();
-                        if (audioTracks.length === 1) {
-                            localStream = stream;
-                            localvideo.srcObject = localStream;
-                            localvideo.play();
-                            const videoTracks = localStream.getVideoTracks();
-                            const audioTracks = localStream.getAudioTracks();
-                            if (videoTracks.length > 0) {
-                                console.log(`Using video device: ${videoTracks[0].label}`);
-                            }
-                            if (audioTracks.length > 0) {
-                                console.log(`Using audio device: ${audioTracks[0].label}`);
-                            }
-                            localStream.oninactive = () => {
-                                console.log('Stream inactive:', localStream);
-                            };
-                        } else {
-                                console.log('The media stream contains an invalid number of audio tracks.');
-                                localStream.getTracks().forEach(track => track.stop());
-                        }
+                startTime = window.performance.now();
+                const audioTracks = stream.getAudioTracks();
+                if (audioTracks.length === 1) {
+                    localStream = stream;
+                    // localvideo.srcObject = localStream;
+                    //localvideo.play();
+                    const videoTracks = localStream.getVideoTracks();
+                    const audioTracks = localStream.getAudioTracks();
+                    if (videoTracks.length > 0) {
+                        console.log(`Using video device: ${videoTracks[0].label}`);
                     }
+                    if (audioTracks.length > 0) {
+                        console.log(`Using audio device: ${audioTracks[0].label}`);
+                    }
+                    localStream.oninactive = () => {
+                        console.log('Stream inactive:', localStream);
+                    };
+
+                    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                    console.log('Adding Local Stream to peer connection');
+                } else {
+                        console.log('The media stream contains an invalid number of audio tracks.');
+                        localStream.getTracks().forEach(track => track.stop());
+                }
+            }
 
             function handleFailure(error) {
                 console.log(`Failed to get access to local media. Error: ${error.name}`);
@@ -368,8 +628,6 @@
                 // sendChannel.onopen = onSendChannelStateChange;
                 // sendChannel.onmessage = onSendChannelMessageCallback;
                 // sendChannel.onclose = onSendChannelStateChange;
-                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-                console.log('Adding Local Stream to peer connection');
                 console.log('createOffer start');
                 pc.createOffer(offerOptions).then(onCreateOfferSuccess, onCreateSessionDescriptionError);
                 // const offer = await pc.createOffer(offerOptions);
@@ -421,14 +679,19 @@
                     remote_PostMessage(message);
                 };
 
+                pc.addEventListener('track', gotRemoteStream);
                 // pc.ontrack = handleRemoteVideo;
-                pc.ontrack = (e) => {
-                    console.log('ontrack remote');
-                    remotevideo.srcObject = e.streams[0];
-                    remotevideo.play();
-                    // hangupButton.disabled = false;
-                    // return false;
-                };
+                // pc.ontrack = (e) => {
+                //     // remotevideo.srcObject = e.streams[0];
+                //     // remotevideo.play();
+                //     // hangupButton.disabled = false;
+                //     // return false;
+                //     if (remotevideo.srcObject !== event.streams[0]) {
+                //         // remotevideo.srcObject = event.streams[0];
+                //         // remotevideo.srcObject.getTracks().forEach(track => remotevideo.srcObject.addTrack(track, event.streams[0]));
+                //         console.log('ontrack remote', event);
+                //     }
+                // };
                 // pc.addEventListener('track', async (event) => {
                 //     console.log('ontrack remote');
                 //     const [remoteStream] = event.streams;

@@ -1,8 +1,5 @@
 #include <cJSON.h>
 #include <string.h>
-#include <aos/aos.h>
-#include <aos/kernel.h>
-#include <aos/cli.h>
 #include "socket.h"
 #include "thread.h"
 #include "udp.h"
@@ -18,6 +15,7 @@
 #define PIPE_BUFF_SIZE 2048
 
 // static struct sockaddr_in pipe_addr;
+static thread_t pipe_thread;
 static addr_record_t pipe_local_addr;
 static addr_record_t pipe_remote_addr;
 static int pipe_sockfd = -1;
@@ -100,8 +98,8 @@ void pipe_recv_process(peer_connection_t *pc, char *buf, size_t size, addr_recor
     }
 }
 
-static void pipe_task_entry(void *param) {
-    int ret;
+static void *pipe_thread_entry(void *param) {
+    int ret = 0;
     int len;
 	struct pollfd pfd[1];
     udp_socket_config_t pipe_socket_config;
@@ -126,7 +124,7 @@ static void pipe_task_entry(void *param) {
     if (pipe_sockfd < 0)
     {
         JLOG_ERROR("Socket error\n");
-        return;
+        goto __exit;
     }
 
     // pipe connect
@@ -136,6 +134,9 @@ static void pipe_task_entry(void *param) {
     juice_udp_sendto(pipe_sockfd, pipe_json_connect, strlen(pipe_json_connect), &pipe_remote_addr);
     
     timediff_t timediff = 1000;
+
+    thread_set_name_self("pipe_thread");
+
     while (1) {
         int ret = poll(pfd, 1, (int)timediff);
 		if (ret < 0) {
@@ -155,12 +156,32 @@ static void pipe_task_entry(void *param) {
             }
         }
     }
+
+__exit:
+    pthread_exit(&ret);
+    return NULL;
 }
 
-int pipe_create(char *name, void *param) {
-    
-    return aos_task_new(name, pipe_task_entry,  param, 10*1024);
+static int pipe_init(thread_entry_t thread_entry, void *param) {
+    int ret = -1;
+    thread_attr_t attr;
+
+    thread_attr_init(&attr, THREAD_DEFAULT_PRIORITY - 1, 20*1024);
+    ret = thread_init_ex(&pipe_thread, &attr, thread_entry, param);
+    if (ret != 0) {
+        JLOG_ERROR("pipe thread created failure!");
+    } else {
+        JLOG_INFO("pipe thread created!");
+    }
+    return ret;
 }
+
+void pipe_create(char *name, void *param) {
+    pipe_init(pipe_thread_entry, param);
+}
+
+#if 0
+#include <aos/cli.h>
 
 static void pipe_client_send(int argc, char **argv) {
     int ret;
@@ -194,3 +215,5 @@ static void pipe_client(int argc, char **argv) {
     }
 }
 ALIOS_CLI_CMD_REGISTER(pipe_client, pipe_client, pipe_client);
+
+#endif

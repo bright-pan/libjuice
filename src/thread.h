@@ -15,6 +15,8 @@
 #include JUICE_CONFIG_FILE
 #endif
 
+typedef void *(*thread_entry_t)(void *);
+
 #ifdef _WIN32
 
 #ifndef _WIN32_WINNT
