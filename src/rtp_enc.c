@@ -199,7 +199,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
                         alaw_to_pcm16(rtp_payload_len, (char *)rtp_packet->payload, pcm_play_buffer + pcm_play_period_size * 2);
                         if (pcm_play_period_size + rtp_payload_len >= PCM_PLAY_HW_PARAMS_PERIOD_SIZE) {
                             ret = aos_pcm_writei(play->pcm->handle, pcm_play_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
-                            aos_pcm_write_wait_complete(play->pcm->handle, PCM_PLAY_TIMOUT_MS);
+                            aos_pcm_write_wait_complete(play->pcm->handle, PCM_PLAY_PERIOD_TIMEOUT);
                             if(ret < 0) {
                                 JLOG_ERROR("pcm play error: ret=%d", ret);
                             } else {
