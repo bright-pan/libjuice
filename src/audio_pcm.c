@@ -14,6 +14,9 @@
 #include "audio_pcm.h"
 
 
+static float audio_multiplier = 1.995262f; //+6db
+
+
 int pcm_init(pcm_t *pcm, char *name, aos_pcm_stream_t stream) {
     int ret = -1;
     aos_pcm_hw_params_t *hw_params;
@@ -148,6 +151,22 @@ int audio_stereo2mono(const short *src_audio, int frames, short *dst_audio, int 
     return frames;
 }
 
+void audio_set_multiplier(int db) {
+    audio_multiplier = pow(10,db/20.0f);
+    JLOG_INFO("audio_multiplier=%f", audio_multiplier);
+}
+
+static short audio_adjust_db(short src) {
+    int32_t pcmval = src * audio_multiplier;
+
+    if (pcmval > 32767) {
+        src = 32767;
+    } else if (pcmval < -32768) {
+        src = -32768;
+    }
+    return src;
+}
+
 void audio_3a_process(audio_t *audio, char *pMicIn, int frameSize, char *pMicOut, int frameDataSize)
 {
     int RetframeLen = 0;
@@ -162,10 +181,13 @@ void audio_3a_process(audio_t *audio, char *pMicIn, int frameSize, char *pMicOut
     {
         doDataIndex = doIndex * doStep;
         #if ENABLE_3A_DATA
-        memcpy(audio->datain, &pMicIn[doDataIndex], doStep);
+        // memcpy(audio->datain, &pMicIn[doDataIndex], doStep);
+        short *datain = (short *)&pMicIn[doDataIndex];
         for (int i = 0; i < CVIAUDIO_AEC_LENGTH; i++) {
-            audio->mic_in[i] = audio->datain[i * 2 + MIC_AUDIO_LEFT];
-            audio->ref_in[i] = audio->datain[i * 2 + MIC_AUDIO_RIGHT];
+            // short *datain = &pMicIn[doDataIndex];
+            audio->mic_in[i] = datain[i * 2 + MIC_AUDIO_LEFT];
+            audio->ref_in[i] = audio_adjust_db(datain[i * 2 + MIC_AUDIO_RIGHT]);
+            datain[doDataIndex + i * 2 + MIC_AUDIO_RIGHT] = audio->ref_in[i];
         }
 
         if ((pstVqeConfig->u32OpenMask & AI_TALKVQE_MASK_AEC) == AI_TALKVQE_MASK_AEC) {//aec

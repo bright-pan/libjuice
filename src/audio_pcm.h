@@ -17,7 +17,7 @@
 #define PCM_CAPTURE_DEVICE_NAME "pcmC0"
 #define PCM_CAPTURE_DEVICE_STREAM AOS_PCM_STREAM_CAPTURE
 
-#define PCM_CAPTURE_INPUT_GAIN 12
+#define PCM_CAPTURE_INPUT_GAIN 17
 #define PCM_CAPTURE_HW_PARAMS_DIR 1
 #define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH 16 // sample depth
 #define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES (PCM_CAPTURE_HW_PARAMS_BIT_DEPTH / 8) // sample depth bytes
@@ -42,7 +42,7 @@
 
 #define RTP_AUDIO_DEC_PERIOD_SIZE 160
 
-#define PCM_PLAY_OUTPUT_GAIN 7
+#define PCM_PLAY_OUTPUT_GAIN 25
 #define PCM_PLAY_HW_PARAMS_DIR 0
 #define PCM_PLAY_HW_PARAMS_BIT_DEPTH 16 // play depth
 #define PCM_PLAY_HW_PARAMS_BIT_DEPTH_BYTES (PCM_PLAY_HW_PARAMS_BIT_DEPTH / 8) // play depth bytes
@@ -93,5 +93,6 @@ void audio_3a_process(audio_t *audio, char *pMicIn, int frameSize, char *pMicOut
 
 void audio_capture_set_gain(audio_t *audio, int again, int dgain);
 void audio_play_set_gain(audio_t *audio, int again, int dgain);
+void audio_set_multiplier(int db);
 
 #endif
