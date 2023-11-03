@@ -23,7 +23,7 @@
 #define PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES (PCM_CAPTURE_HW_PARAMS_BIT_DEPTH / 8) // sample depth bytes
 #define PCM_CAPTURE_HW_PARAMS_CHANNEL 2 // sample channel
 #define PCM_CAPTURE_HW_PARAMS_RATE 8000 // sample rate
-#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE (160)// 25fps(40ms/packet) sample window size
+#define PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE (320)// 25fps(40ms/packet) sample window size
 #define PCM_CAPTURE_HW_PARAMS_PERIOD_BYTES (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES * PCM_CAPTURE_HW_PARAMS_CHANNEL)
 #define PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE (PCM_CAPTURE_HW_PARAMS_PERIOD_SIZE * 2) // sample window buffer size
 #define PCM_CAPTURE_HW_PARAMS_BUFFER_BYTES (PCM_CAPTURE_HW_PARAMS_BUFFER_SIZE * PCM_CAPTURE_HW_PARAMS_BIT_DEPTH_BYTES * PCM_CAPTURE_HW_PARAMS_CHANNEL)
@@ -48,7 +48,7 @@
 #define PCM_PLAY_HW_PARAMS_BIT_DEPTH_BYTES (PCM_PLAY_HW_PARAMS_BIT_DEPTH / 8) // play depth bytes
 #define PCM_PLAY_HW_PARAMS_CHANNEL 2
 #define PCM_PLAY_HW_PARAMS_RATE 8000
-#define PCM_PLAY_HW_PARAMS_PERIOD_SIZE 160 // 10fps(100ms/packet) play window size
+#define PCM_PLAY_HW_PARAMS_PERIOD_SIZE 1280 // 10fps(100ms/packet) play window size
 #define PCM_PLAY_HW_PARAMS_PERIOD_BYTES (PCM_PLAY_HW_PARAMS_PERIOD_SIZE * PCM_PLAY_HW_PARAMS_BIT_DEPTH_BYTES * PCM_PLAY_HW_PARAMS_CHANNEL)
 #define PCM_PLAY_HW_PARAMS_BUFFER_SIZE (PCM_PLAY_HW_PARAMS_PERIOD_SIZE * 2) // play window buuffer size
 #define PCM_PLAY_HW_PARAMS_BUFFER_BYTES (PCM_PLAY_HW_PARAMS_BUFFER_SIZE * PCM_PLAY_HW_PARAMS_BIT_DEPTH_BYTES * PCM_PLAY_HW_PARAMS_CHANNEL)
@@ -57,7 +57,7 @@
 
 #define RTP_AUDIO_DEC_PERIOD_PACKET_SIZE (PCM_PLAY_HW_PARAMS_PERIOD_SIZE / RTP_AUDIO_DEC_PERIOD_SIZE)
 
-#define RTP_AUDIO_DEC_INTERVAL (RTP_AUDIO_DEC_PERIOD_SIZE * 1000 / PCM_PLAY_HW_PARAMS_RATE) //20ms
+#define RTP_AUDIO_DEC_INTERVAL (PCM_PLAY_PERIOD_TIMEOUT / 2) //ms
 
 typedef struct {
     aos_pcm_t *handle;
@@ -81,6 +81,14 @@ typedef struct {
     short *dataout;
 } audio_t;
 
+typedef enum {
+    AUDIO_MULTIPLITER_TYPE_REF = 0,
+    AUDIO_MULTIPLITER_TYPE_SPK = 1
+} audio_multiplier_type_t;
+
+#define AUDIO_MULTIPLITER_VALUE_REF 6 // 6db
+#define AUDIO_MULTIPLITER_VALUE_SPK 2 // 2db
+
 void audio_3a_init(audio_t *audio);
 int pcm_capture_init(pcm_t *pcm);
 int pcm_play_init(pcm_t *pcm);
@@ -93,6 +101,6 @@ void audio_3a_process(audio_t *audio, char *pMicIn, int frameSize, char *pMicOut
 
 void audio_capture_set_gain(audio_t *audio, int again, int dgain);
 void audio_play_set_gain(audio_t *audio, int again, int dgain);
-void audio_set_multiplier(int db);
+void audio_set_multiplier(audio_multiplier_type_t type, int db);
 
 #endif

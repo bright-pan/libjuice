@@ -115,6 +115,7 @@ static void test_audio_usage(int argc, char **argv) {
     JLOG_ERROR("Usage: %s rec_reset\n", argv[0]);
     JLOG_ERROR("Usage: %s rec_3a [0/1]\n", argv[0]);
     JLOG_ERROR("Usage: %s rec_push [0/1]\n", argv[0]);
+    JLOG_ERROR("Usage: %s set_multi [0/1] [db_value]\n", argv[0]);
 }
 
 static void test_audio(int argc, char **argv) {
@@ -130,7 +131,7 @@ static void test_audio(int argc, char **argv) {
     if (strstr(argv[1], "init")) {
         test_audio_thread_init();
     } else if (strstr(argv[1], "set_multi")) {
-        audio_set_multiplier(atoi(argv[2]));
+        audio_set_multiplier(atoi(argv[2]), atoi(argv[3]));
     } else if (strstr(argv[1], "play_gain")) {
         audio_play_set_gain(play, atoi(argv[2]), atoi(argv[3]));
     } else if (strstr(argv[1], "capture_gain")) {

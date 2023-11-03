@@ -77,6 +77,10 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
         JLOG_ERROR("Usage: %s create|start|remote|pair\n", argv[0]);
         JLOG_ERROR("Usage: %s get local|remote\n", argv[0]);
         JLOG_ERROR("Usage: %s rtp_enc init|start|stop|restart\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_video_enc init|start|stop|restart\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_audio_enc init|start|stop|restart\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_dec init|start|stop|restart\n", argv[0]);
+        JLOG_ERROR("Usage: %s rtp_audio_dec init|start|stop|restart\n", argv[0]);
         JLOG_ERROR("Usage: %s push offer|answer\n", argv[0]);
         JLOG_ERROR("Usage: %s state xxx\n", argv[0]);
         JLOG_ERROR("Usage: %s handshake\n", argv[0]);
@@ -121,6 +125,42 @@ static void pc_cli_process(int argc, char **argv, char *pc_name, peer_connection
             rtp_enc_restart(pc);
         } else {
             JLOG_ERROR("Usage: %s rtp_enc init|start|stop|restart\n", argv[0]);
+        }
+   } else if (strstr(argv[1], "rtp_video_enc")) {
+        if (strstr(argv[2], "init")) {
+            rtp_video_enc_init(pc);
+        } else if (strstr(argv[2], "start")) {
+            rtp_video_enc_start(pc);
+        } else if (strstr(argv[2], "stop")) {
+            rtp_video_enc_stop(pc);
+        } else if (strstr(argv[2], "restart")) {
+            rtp_video_enc_restart(pc);
+        } else {
+            JLOG_ERROR("Usage: %s rtp_video_enc init|start|stop|restart\n", argv[0]);
+        }
+   } else if (strstr(argv[1], "rtp_audio_enc")) {
+        if (strstr(argv[2], "init")) {
+            rtp_audio_enc_init(pc);
+        } else if (strstr(argv[2], "start")) {
+            rtp_audio_enc_start(pc);
+        } else if (strstr(argv[2], "stop")) {
+            rtp_audio_enc_stop(pc);
+        } else if (strstr(argv[2], "restart")) {
+            rtp_audio_enc_restart(pc);
+        } else {
+            JLOG_ERROR("Usage: %s rtp_audio_enc init|start|stop|restart\n", argv[0]);
+        }
+   } else if (strstr(argv[1], "rtp_audio_dec")) {
+        if (strstr(argv[2], "init")) {
+            rtp_audio_dec_init(pc);
+        } else if (strstr(argv[2], "start")) {
+            rtp_audio_dec_start(pc);
+        } else if (strstr(argv[2], "stop")) {
+            rtp_audio_dec_stop(pc);
+        } else if (strstr(argv[2], "restart")) {
+            rtp_audio_dec_restart(pc);
+        } else {
+            JLOG_ERROR("Usage: %s rtp_audio_enc init|start|stop|restart\n", argv[0]);
         }
    } else if (strstr(argv[1], "rtp_dec")) {
         if (strstr(argv[2], "init")) {

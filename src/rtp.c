@@ -14,53 +14,6 @@
 #include "log.h"
 
 
-typedef enum {
-
-    NALU = 23,
-    FU_A = 28,
-
-} rtp_h264_type_t;
-
-typedef enum {
-    NALU_TYPE_IDRSLICE = 5,
-    NALU_TYPE_SPS = 7,
-    NALU_TYPE_PPS = 8
-
-} nalu_type_t;
-
-typedef struct {
-
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    uint8_t f:1;
-    uint8_t nri:2;
-    uint8_t type:5;
-#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    uint8_t type:5;
-    uint8_t nri:2;
-    uint8_t f:1;
-#endif
-
-} nalu_header_t;
-
-typedef struct {
-
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    uint8_t s:1;
-    uint8_t e:1;
-    uint8_t r:1;
-    uint8_t type:5;
-#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    uint8_t type:5;
-    uint8_t r:1;
-    uint8_t e:1;
-    uint8_t s:1;
-#endif
-
-} fu_header_t;
-
-#define RTP_PAYLOAD_SIZE (CONFIG_MTU - sizeof(rtp_header_t))
-#define FU_PAYLOAD_SIZE (CONFIG_MTU - sizeof(rtp_header_t) - sizeof(fu_header_t) - sizeof(nalu_header_t))
-
 int rtp_packet_validate(uint8_t *packet, size_t size) {
 
   if(size < 12)
@@ -70,7 +23,7 @@ int rtp_packet_validate(uint8_t *packet, size_t size) {
   return ((rtp_header->type < 64) || (rtp_header->type >= 96));
 }
 
-static int is_pframe(nalu_type_t type) {
+int is_pframe(nalu_type_t type) {
     return type != NALU_TYPE_PPS && type != NALU_TYPE_SPS && type != NALU_TYPE_IDRSLICE;
 }
 

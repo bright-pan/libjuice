@@ -14,7 +14,7 @@
 #include "audio_pcm.h"
 
 
-static float audio_multiplier = 1.995262f; //+6db
+static float audio_multiplier[2];
 
 
 int pcm_init(pcm_t *pcm, char *name, aos_pcm_stream_t stream) {
@@ -123,6 +123,7 @@ void audio_capture_init(audio_t *audio, pcm_t *pcm) {
     pcm_capture_init(pcm);
     audio->pcm = pcm;
     audio_capture_set_gain(audio, PCM_CAPTURE_INPUT_GAIN, PCM_CAPTURE_INPUT_GAIN);
+    audio_set_multiplier(AUDIO_MULTIPLITER_TYPE_REF, AUDIO_MULTIPLITER_VALUE_REF);
     audio_3a_init(audio);
 }
 
@@ -130,6 +131,7 @@ void audio_play_init(audio_t *audio, pcm_t *pcm) {
     pcm_play_init(pcm);
     audio->pcm = pcm;
     audio_play_set_gain(audio, PCM_PLAY_OUTPUT_GAIN, PCM_PLAY_OUTPUT_GAIN);
+    audio_set_multiplier(AUDIO_MULTIPLITER_TYPE_SPK, AUDIO_MULTIPLITER_VALUE_SPK);
 }
 
 int audio_mono2stereo(const short *src_audio, int frames, short *dst_audio)
@@ -151,13 +153,13 @@ int audio_stereo2mono(const short *src_audio, int frames, short *dst_audio, int 
     return frames;
 }
 
-void audio_set_multiplier(int db) {
-    audio_multiplier = pow(10,db/20.0f);
-    JLOG_INFO("audio_multiplier=%f", audio_multiplier);
+void audio_set_multiplier(audio_multiplier_type_t type, int db) {
+    audio_multiplier[type] = pow(10, db / 20.0f);
+    JLOG_INFO("audio_multiplier[%d]=%f", type, audio_multiplier[type]);
 }
 
-static short audio_adjust_db(short src) {
-    int32_t pcmval = src * audio_multiplier;
+static short audio_adjust_db(audio_multiplier_type_t type, short src) {
+    int32_t pcmval = src * audio_multiplier[type];
 
     if (pcmval > 32767) {
         src = 32767;
@@ -186,7 +188,7 @@ void audio_3a_process(audio_t *audio, char *pMicIn, int frameSize, char *pMicOut
         for (int i = 0; i < CVIAUDIO_AEC_LENGTH; i++) {
             // short *datain = &pMicIn[doDataIndex];
             audio->mic_in[i] = datain[i * 2 + MIC_AUDIO_LEFT];
-            audio->ref_in[i] = audio_adjust_db(datain[i * 2 + MIC_AUDIO_RIGHT]);
+            audio->ref_in[i] = audio_adjust_db(AUDIO_MULTIPLITER_TYPE_REF, datain[i * 2 + MIC_AUDIO_RIGHT]);
             datain[doDataIndex + i * 2 + MIC_AUDIO_RIGHT] = audio->ref_in[i];
         }
 

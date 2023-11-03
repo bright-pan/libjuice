@@ -10,6 +10,55 @@
 #include <stdint.h>
 #include "codec.h"
 
+
+#define RTP_PAYLOAD_SIZE (CONFIG_MTU - sizeof(rtp_header_t))
+#define FU_PAYLOAD_SIZE (CONFIG_MTU - sizeof(rtp_header_t) - sizeof(fu_header_t) - sizeof(nalu_header_t))
+
+
+typedef enum {
+
+    NALU = 23,
+    FU_A = 28,
+
+} rtp_h264_type_t;
+
+typedef enum {
+    NALU_TYPE_IDRSLICE = 5,
+    NALU_TYPE_SPS = 7,
+    NALU_TYPE_PPS = 8
+
+} nalu_type_t;
+
+typedef struct {
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint8_t f:1;
+    uint8_t nri:2;
+    uint8_t type:5;
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    uint8_t type:5;
+    uint8_t nri:2;
+    uint8_t f:1;
+#endif
+
+} nalu_header_t;
+
+typedef struct {
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint8_t s:1;
+    uint8_t e:1;
+    uint8_t r:1;
+    uint8_t type:5;
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    uint8_t type:5;
+    uint8_t r:1;
+    uint8_t e:1;
+    uint8_t s:1;
+#endif
+
+} fu_header_t;
+
 typedef enum {
 
     RTP_PAYLOAD_TYPE_PCMU = 0,
@@ -98,5 +147,6 @@ void rtp_packetizer_init(rtp_packetizer_t *rtp_packetizer, media_codec_t codec, 
                          void *user_data);
 
 int rtp_packetizer_encode(rtp_packetizer_t *rtp_packetizer, void *buf, size_t size);
+int is_pframe(nalu_type_t type);
 
 #endif // RTP_H_

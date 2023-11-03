@@ -42,10 +42,13 @@ int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
             if (rtp_list_rlock(&pc->rtp_tx_cache_list) == 0) {
                 rtp_frame_t *frame = rtp_list_find_by_key_ex(&pc->rtp_tx_cache_list, key);
                 if (frame) {
-                    ret = rtp_list_insert_packet(&pc->rtp_rtx_cache_list, frame->packet, frame->bytes);
-                    if (ret < 0) {
-                        JLOG_ERROR("insert rtp_rtx_cache_list error, count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
+                    if (peer_connection_encrypt_send(pc, frame->packet, frame->bytes) != JUICE_ERR_SUCCESS) {
+                        JLOG_ERROR("peer_connection_encrypt_send error");
                     }
+                    // ret = rtp_list_insert_packet(&pc->rtp_rtx_cache_list, frame->packet, frame->bytes);
+                    // if (ret < 0) {
+                    //     JLOG_ERROR("insert rtp_rtx_cache_list error, count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
+                    // }
                     JLOG_INFO("rtx packet ssrc: %d seq: %d, length: %d", ssrc, seq,  frame->bytes);
                     // rtx
                     // rtp_packetizer_encode(&pc->video_rtx_packetizer, frame->packet, frame->bytes);
@@ -643,7 +646,7 @@ void *loop_thread_entry(void *param) {
             default:
             break;
         }
-        usleep(1*1000);
+        usleep(5*1000);
     }
     pthread_exit(&ret);
     return NULL;

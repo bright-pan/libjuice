@@ -55,12 +55,17 @@ static void rtp_enc_packetizer_callback(char *packet, int bytes, void *user_data
 }
 
 static void rtp_enc_rtx_packetizer_callback(char *packet, int bytes, void *user_data) {
+    int ret;
     peer_connection_t *pc = user_data;
 
-    // JLOG_INFO("rtp_enc_rtx_packetizer_callback [%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
-    if (peer_connection_encrypt_send(pc, packet, bytes) != JUICE_ERR_SUCCESS) {
-        JLOG_ERROR("peer_connection_encrypt_send error");
+    ret = rtp_list_insert_packet(&pc->rtp_rtx_cache_list, packet, bytes);
+    if (ret < 0) {
+        JLOG_ERROR("insert rtp_rtx_cache_list error, count:%d", rtp_list_count(&pc->rtp_rtx_cache_list));
     }
+    // JLOG_INFO("rtp_enc_rtx_packetizer_callback [%d:%d]", ntohl(((rtp_header_t *)packet)->ssrc), ntohs(((rtp_header_t *)packet)->seq_number));
+    // if (peer_connection_encrypt_send(pc, packet, bytes) != JUICE_ERR_SUCCESS) {
+    //     JLOG_ERROR("peer_connection_encrypt_send error");
+    // }
 }
 
 static void *rtp_video_enc_thread_entry(void *param) {
@@ -85,7 +90,7 @@ static void *rtp_video_enc_thread_entry(void *param) {
     }
 
     while (1) {
-        if (pc->rtp_audio_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
+        if (pc->rtp_video_enc_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
             if(MEDIA_VIDEO_VencGetStream(0, &venc_stream, 2000) == CVI_SUCCESS) {
                 //pack proc
                 for(iPackid = 0; iPackid < venc_stream.u32PackCount; iPackid++ )
@@ -95,6 +100,8 @@ static void *rtp_video_enc_thread_entry(void *param) {
                     rtp_packetizer_encode(&pc->video_packetizer, (uint8_t*)pPack->pu8Addr, pPack->u32Len);
                     mutex_unlock(&pc->packetizer_mutex);
                 }
+                // if (venc_stream.u32PackCount > 1)
+                //     JLOG_INFO("venc get stream: %d", venc_stream.u32PackCount);
                 MEDIA_VIDEO_VencReleaseStream(0, &venc_stream);
             } else {
                 usleep(1000*RTP_VIDEO_ENC_INTERVAL);
@@ -107,7 +114,7 @@ static void *rtp_video_enc_thread_entry(void *param) {
     return NULL;
 }
 
-static void *rtp_audio_enc_thread_entry(void *param) {
+void *rtp_audio_enc_thread_entry(void *param) {
     int ret = 0;
     peer_connection_t *pc = param;
     audio_t *capture = &audio_capture;
@@ -162,7 +169,7 @@ static void *rtp_audio_enc_thread_entry(void *param) {
 }
 
 extern int aos_pcm_write_wait_complete(aos_pcm_t *pcm, int timeout);
-static void *rtp_audio_dec_thread_entry(void *param) {
+void *rtp_audio_dec_thread_entry(void *param) {
     int ret = 0;
     rtp_frame_t *frame;
     rtp_frame_t *tmp;
@@ -219,7 +226,7 @@ static void *rtp_audio_dec_thread_entry(void *param) {
                     rtp_list_delete(&pc->rtp_recv_cache_list, frame);
                 }
             } else {
-                usleep(RTP_AUDIO_DEC_INTERVAL*1000);
+                usleep(5*1000);
             }
         }
         /*
@@ -299,14 +306,6 @@ int rtp_audio_dec_thread_init(peer_connection_t *pc, void *(*thread_entry)(void 
     return ret;
 }
 
-void rtp_enc_init(peer_connection_t *pc) {
-    rtp_video_enc_thread_init(pc, rtp_video_enc_thread_entry);
-    rtp_audio_enc_thread_init(pc, rtp_audio_enc_thread_entry);
-}
-
-void rtp_dec_init(peer_connection_t *pc) {
-    rtp_audio_dec_thread_init(pc, rtp_audio_dec_thread_entry);
-}
 
 int rtcp_psfb_pli_process(void) {
     int ret = -1;
@@ -322,36 +321,95 @@ int rtcp_psfb_pli_process(void) {
     return ret;
 }
 
-void rtp_enc_start(peer_connection_t *pc) {
-    MEDIA_VIDEO_force_Iframe(0);
-    pc->rtp_video_enc_loop_flag = 1;
-    pc->rtp_audio_enc_loop_flag = 1;
+//audio dec
+void rtp_audio_dec_init(peer_connection_t *pc) {
+    rtp_audio_dec_thread_init(pc, rtp_audio_dec_thread_entry);
 }
 
-void rtp_dec_start(peer_connection_t *pc) {
+void rtp_audio_dec_start(peer_connection_t *pc) {
     pc->rtp_audio_dec_loop_flag = 1;
 }
 
-void rtp_enc_stop(peer_connection_t *pc) {
-    pc->rtp_video_enc_loop_flag = 0;
-    pc->rtp_audio_enc_loop_flag = 0;
-    // usleep(1000*1000);
-    // peer_connection_reset_video_fifo(pc);
+void rtp_audio_dec_stop(peer_connection_t *pc) {
+    pc->rtp_audio_dec_loop_flag = 0;
+}
+
+void rtp_audio_dec_restart(peer_connection_t *pc) {
+    rtp_audio_dec_stop(pc);
+    rtp_audio_dec_start(pc);
+}
+
+// dec
+void rtp_dec_init(peer_connection_t *pc) {
+    rtp_audio_dec_init(pc);
+}
+
+void rtp_dec_start(peer_connection_t *pc) {
+    rtp_audio_dec_start(pc);
 }
 
 void rtp_dec_stop(peer_connection_t *pc) {
-    pc->rtp_audio_dec_loop_flag = 0;
-    // usleep(1000*1000);
-    // peer_connection_reset_video_fifo(pc);
-}
-
-void rtp_enc_restart(peer_connection_t *pc) {
-    rtp_enc_stop(pc);
-    rtp_enc_start(pc);
+    rtp_audio_dec_stop(pc);
 }
 
 void rtp_dec_restart(peer_connection_t *pc) {
-    rtp_dec_stop(pc);
-    rtp_dec_start(pc);
+    rtp_audio_dec_restart(pc);
 }
 
+//video enc
+void rtp_video_enc_init(peer_connection_t *pc) {
+    rtp_video_enc_thread_init(pc, rtp_video_enc_thread_entry);
+}
+
+void rtp_video_enc_start(peer_connection_t *pc) {
+    MEDIA_VIDEO_force_Iframe(0);
+    pc->rtp_video_enc_loop_flag = 1;
+}
+
+void rtp_video_enc_stop(peer_connection_t *pc) {
+    pc->rtp_video_enc_loop_flag = 0;
+}
+
+void rtp_video_enc_restart(peer_connection_t *pc) {
+    rtp_video_enc_stop(pc);
+    rtp_video_enc_start(pc);
+}
+
+// audio enc
+void rtp_audio_enc_init(peer_connection_t *pc) {
+    rtp_audio_enc_thread_init(pc, rtp_audio_enc_thread_entry);
+}
+
+void rtp_audio_enc_start(peer_connection_t *pc) {
+    pc->rtp_audio_enc_loop_flag = 1;
+}
+
+void rtp_audio_enc_stop(peer_connection_t *pc) {
+    pc->rtp_audio_enc_loop_flag = 0;
+}
+
+void rtp_audio_enc_restart(peer_connection_t *pc) {
+    rtp_audio_enc_stop(pc);
+    rtp_audio_enc_start(pc);
+}
+
+// enc
+void rtp_enc_init(peer_connection_t *pc) {
+    rtp_video_enc_init(pc);
+    rtp_audio_enc_init(pc);
+}
+
+void rtp_enc_start(peer_connection_t *pc) {
+    rtp_video_enc_start(pc);
+    rtp_audio_enc_start(pc);
+}
+
+void rtp_enc_stop(peer_connection_t *pc) {
+    rtp_video_enc_stop(pc);
+    rtp_audio_enc_stop(pc);
+}
+
+void rtp_enc_restart(peer_connection_t *pc) {
+    rtp_video_enc_restart(pc);
+    rtp_audio_enc_restart(pc);
+}
