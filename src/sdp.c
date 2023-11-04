@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include "rtp.h"
 #include "sdp.h"
 
 /*
@@ -38,23 +39,23 @@ void sdp_reset(sdp_t *sdp) { memset(sdp->content, 0, sizeof(sdp->content)); }
 void sdp_append_h264(sdp_t *sdp) {
 
     // sdp_append(sdp, "m=video 9 UDP/TLS/RTP/SAVPF 102 103");
-    sdp_append(sdp, "m=video 9 UDP/TLS/RTP/SAVPF 102 103");
+    sdp_append(sdp, "m=video 9 UDP/TLS/RTP/SAVPF %d %d", RTP_PAYLOAD_TYPE_H264, RTP_PAYLOAD_TYPE_H264_RTX);
     sdp_append(sdp, "c=IN IP4 0.0.0.0");
     sdp_append(sdp, "a=mid:1");
     sdp_append(sdp, "a=sendonly");
     sdp_append(sdp, "a=rtcp-mux");
-    sdp_append(sdp, "a=rtpmap:102 H264/90000");
-    sdp_append(sdp, "a=rtcp-fb:102 goog-remb");
-    sdp_append(sdp, "a=rtcp-fb:102 transport-cc");
-    sdp_append(sdp, "a=rtcp-fb:102 ccm fir");
-    sdp_append(sdp, "a=rtcp-fb:102 nack");
-    sdp_append(sdp, "a=rtcp-fb:102 nack pli");
-    sdp_append(sdp, "a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f");
+    sdp_append(sdp, "a=rtpmap:%d H264/90000", RTP_PAYLOAD_TYPE_H264);
+    sdp_append(sdp, "a=rtcp-fb:%d goog-remb", RTP_PAYLOAD_TYPE_H264);
+    sdp_append(sdp, "a=rtcp-fb:%d transport-cc", RTP_PAYLOAD_TYPE_H264);
+    sdp_append(sdp, "a=rtcp-fb:%d ccm fir", RTP_PAYLOAD_TYPE_H264);
+    sdp_append(sdp, "a=rtcp-fb:%d nack", RTP_PAYLOAD_TYPE_H264);
+    sdp_append(sdp, "a=rtcp-fb:%d nack pli", RTP_PAYLOAD_TYPE_H264);
+    sdp_append(sdp, "a=fmtp:%d level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f", RTP_PAYLOAD_TYPE_H264);
     // sdp_append(sdp, "a=ssrc:9527 cname:webrtc-h264");
-    sdp_append(sdp, "a=rtpmap:103 rtx/90000");
-    sdp_append(sdp, "a=fmtp:103 apt=102");
+    sdp_append(sdp, "a=rtpmap:%d rtx/90000", RTP_PAYLOAD_TYPE_H264_RTX);
+    sdp_append(sdp, "a=fmtp:%d apt=%d", RTP_PAYLOAD_TYPE_H264_RTX, RTP_PAYLOAD_TYPE_H264);
     // sdp_append(sdp, "a=ssrc:9528 cname:webrtc-h264-rtx");
-    sdp_append(sdp, "a=ssrc-group:FID 9527 9528");
+    sdp_append(sdp, "a=ssrc-group:FID %d %d", RTP_SSRC_TYPE_H264, RTP_SSRC_TYPE_H264_RTX);
 }
 
 void sdp_append_pcma(sdp_t *sdp) {

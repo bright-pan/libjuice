@@ -618,23 +618,23 @@ void *loop_thread_entry(void *param) {
                 break;
             }
             case PEER_CONNECTION_COMPLETED: {
-                if (rtp_list_count(&pc->rtp_rtx_cache_list) > 0) {
-                    HASH_ITER(hh, pc->rtp_rtx_cache_list.utlist, frame, tmp) {
-                        // process rtp packet
-                        peer_connection_encrypt_send(pc, frame->packet, frame->bytes);
-                        // remove frame
-                        rtp_list_delete(&pc->rtp_rtx_cache_list, frame);
-                    }
-                }
-                // if (pc->options.datachannel) {
-                //     //recv fifo
-                //     char buf[4096];
-                //     int recv_count;
-                //     recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
-                //     if (recv_count > 0) {
-                //         sctp_incoming_data(&pc->sctp, buf, recv_count);
+                // if (rtp_list_count(&pc->rtp_rtx_cache_list) > 0) {
+                //     HASH_ITER(hh, pc->rtp_rtx_cache_list.utlist, frame, tmp) {
+                //         // process rtp packet
+                //         peer_connection_encrypt_send(pc, frame->packet, frame->bytes);
+                //         // remove frame
+                //         rtp_list_delete(&pc->rtp_rtx_cache_list, frame);
                 //     }
                 // }
+                if (pc->options.datachannel) {
+                    //recv fifo
+                    char buf[4096];
+                    int recv_count;
+                    recv_count = dtls_srtp_read(&pc->dtls_srtp, buf, 4096);
+                    if (recv_count > 0) {
+                        sctp_incoming_data(&pc->sctp, buf, recv_count);
+                    }
+                }
                 break;
             }
             case PEER_CONNECTION_FAILED:
