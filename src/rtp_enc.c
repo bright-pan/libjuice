@@ -193,48 +193,52 @@ void *rtp_audio_dec_thread_entry(void *param) {
     audio_demo_init(AUDIO_DEMO_LENGTH, AUDIO_DEMO_CHANNEL_NUM, AUDIO_DEMO_BIT_DEPTH);
 
     while (1) {
-        if (pc->rtp_audio_dec_loop_flag && pc->state == PEER_CONNECTION_COMPLETED && rtp_list_count(&pc->rtp_recv_cache_list) > 0) {
+        if (pc->rtp_audio_dec_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
+            int list_length = rtp_list_count(&pc->rtp_recv_cache_list);
             HASH_ITER(hh, pc->rtp_recv_cache_list.utlist, frame, tmp) {
                 // process rtp packet
-                rtp_packet = (rtp_packet_t *)frame->packet;
-                if (rtp_packet->header.type == RTP_PAYLOAD_TYPE_PCMA) {
-                    rtp_payload_len = frame->bytes - sizeof(rtp_packet_t);
-                    // decode g711a to pcm16
-                    alaw_to_pcm16(rtp_payload_len, (char *)rtp_packet->payload, pcm_play_enc_buffer);
-                    audio_mono2stereo((short *)pcm_play_enc_buffer, rtp_payload_len, (short *)pcm_play_buffer);//left short + right short = len*2 short
-                    aos_pcm_writei(play->pcm->handle, pcm_play_buffer, rtp_payload_len);
-                    aos_pcm_write_wait_complete(play->pcm->handle, (rtp_payload_len * 1.0 / PCM_PLAY_HW_PARAMS_PERIOD_SIZE) * PCM_PLAY_PERIOD_TIMEOUT);
+                if (list_length-- > 0) {
+                    rtp_packet = (rtp_packet_t *)frame->packet;
+                    if (rtp_packet->header.type == RTP_PAYLOAD_TYPE_PCMA) {
+                        rtp_payload_len = frame->bytes - sizeof(rtp_packet_t);
+                        // decode g711a to pcm16
+                        alaw_to_pcm16(rtp_payload_len, (char *)rtp_packet->payload, pcm_play_enc_buffer);
+                        audio_mono2stereo((short *)pcm_play_enc_buffer, rtp_payload_len, (short *)pcm_play_buffer);//left short + right short = len*2 short
+                        aos_pcm_writei(play->pcm->handle, pcm_play_buffer, rtp_payload_len);
+                        aos_pcm_write_wait_complete(play->pcm->handle, (rtp_payload_len * 1.0 / PCM_PLAY_HW_PARAMS_PERIOD_SIZE) * PCM_PLAY_PERIOD_TIMEOUT);
+                        usleep(RTP_AUDIO_DEC_INTERVAL*1000);
+                        if(ret < 0){
+                            JLOG_ERROR("write error");
+                        } else {
+                            //LANGO_LOG_INFO("play audio: %d, dstlen:%d, %d", nReadSize, dstlen,
+                            //               aos_pcm_bytes_to_frames(rtmp_audio.play_handle, dstlen));
+                        }
+                        // audio_mono2stereo((short *)pcm_play_buffer, rtp_payload_len, (short *)pcm_play_enc_buffer);//left short + right short = len*2 short
+                        // if (pcm_play_period_size + rtp_payload_len >= PCM_PLAY_HW_PARAMS_PERIOD_SIZE) {
+                        //     timestamp_t start = current_timestamp();
+                        //     aos_pcm_writei(play->pcm->handle, pcm_play_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
+                        //     aos_pcm_write_wait_complete(play->pcm->handle, PCM_PLAY_PERIOD_TIMEOUT);
+                        //     timestamp_t interval = current_timestamp() - start;
 
-                    // if(interval < PCM_PLAY_PERIOD_TIMEOUT) {
-                    //     usleep((PCM_PLAY_PERIOD_TIMEOUT - interval)*1000);
-                    // }
-                    if(ret < 0){
-                        JLOG_ERROR("write error");
+                        //     if(interval < PCM_PLAY_PERIOD_TIMEOUT) {
+                        //         usleep((PCM_PLAY_PERIOD_TIMEOUT - interval)*1000);
+                        //     }
+                        //     // usleep(PCM_PLAY_PERIOD_TIMEOUT*1000);
+                        //     pcm_play_period_size = 0; // reset
+                        // } else {
+                        //     pcm_play_period_size += rtp_payload_len;
+                        //     // JLOG_INFO("pcm play: period_size!=%d", PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
+                        // }
                     } else {
-                        //LANGO_LOG_INFO("play audio: %d, dstlen:%d, %d", nReadSize, dstlen,
-                        //               aos_pcm_bytes_to_frames(rtmp_audio.play_handle, dstlen));
+                        JLOG_ERROR("rtp_audio_dec payload type is not PCMA/G711A, type:%d, length:%d", rtp_packet->header.type, rtp_payload_len);
                     }
-                    // audio_mono2stereo((short *)pcm_play_buffer, rtp_payload_len, (short *)pcm_play_enc_buffer);//left short + right short = len*2 short
-                    // if (pcm_play_period_size + rtp_payload_len >= PCM_PLAY_HW_PARAMS_PERIOD_SIZE) {
-                    //     timestamp_t start = current_timestamp();
-                    //     aos_pcm_writei(play->pcm->handle, pcm_play_buffer, PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
-                    //     aos_pcm_write_wait_complete(play->pcm->handle, PCM_PLAY_PERIOD_TIMEOUT);
-                    //     timestamp_t interval = current_timestamp() - start;
-
-                    //     if(interval < PCM_PLAY_PERIOD_TIMEOUT) {
-                    //         usleep((PCM_PLAY_PERIOD_TIMEOUT - interval)*1000);
-                    //     }
-                    //     // usleep(PCM_PLAY_PERIOD_TIMEOUT*1000);
-                    //     pcm_play_period_size = 0; // reset
-                    // } else {
-                    //     pcm_play_period_size += rtp_payload_len;
-                    //     // JLOG_INFO("pcm play: period_size!=%d", PCM_PLAY_HW_PARAMS_PERIOD_SIZE);
-                    // }
+                    // remove frame
+                    rtp_list_delete(&pc->rtp_recv_cache_list, frame);
+                    usleep(1*1000);
                 } else {
-                    JLOG_ERROR("rtp_audio_dec payload type is not PCMA/G711A, type:%d, length:%d", rtp_packet->header.type, rtp_payload_len);
+                    usleep(1*1000);
+                    break;
                 }
-                // remove frame
-                rtp_list_delete(&pc->rtp_recv_cache_list, frame);
             }
         }
         /*
