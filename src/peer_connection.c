@@ -23,6 +23,14 @@
 // Turn server config
 static juice_turn_server_t turn_server;
 
+void peer_connection_set_video_payload(peer_connection_t *pc, int payload) {
+    rtp_packetizer_set_payload(&pc->video_packetizer, payload);
+}
+
+void peer_connection_set_audio_payload(peer_connection_t *pc, int payload) {
+    rtp_packetizer_set_payload(&pc->audio_packetizer, payload);
+}
+
 int peer_connection_send_rtp_frame(peer_connection_t *pc, int ssrc, int seq) {
     int ret = JUICE_ERR_FAILED;
     rtp_frame_key_t key;
@@ -436,19 +444,19 @@ void peer_connection_configure(peer_connection_t *pc, char *name, dtls_srtp_role
     // rtp push
     pc->rtp_tx_timer_thread = NULL;
     pc->rtp_tx_timer_thread_ssize = 32*1024;
-    pc->rtp_tx_timer_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
+    pc->rtp_tx_timer_thread_prio = THREAD_DEFAULT_PRIORITY - 3;
 
     // rtp video encode
     pc->rtp_video_enc_thread = NULL;
     pc->rtp_video_enc_loop_flag = 0;
     pc->rtp_video_enc_thread_ssize = 32*1024;
-    pc->rtp_video_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
+    pc->rtp_video_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 3;
 
     // rtp audio encode
     pc->rtp_audio_enc_thread = NULL;
     pc->rtp_audio_enc_loop_flag = 0;
     pc->rtp_audio_enc_thread_ssize = 32*1024;
-    pc->rtp_audio_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 2;
+    pc->rtp_audio_enc_thread_prio = THREAD_DEFAULT_PRIORITY - 3;
 
     // rtp audio decode
     pc->rtp_audio_dec_thread = NULL;

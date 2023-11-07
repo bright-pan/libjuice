@@ -65,11 +65,22 @@ void pipe_recv_process(peer_connection_t *pc, char *buf, size_t size, addr_recor
             if (strstr(cmd_type,"offer")) {
                 char *sdp_string = cJSON_GetObjectItem(cmd, "sdp")->valuestring;
                 if (sdp_string) {
-                    JLOG_INFO("%s", sdp_string);
+                    // JLOG_INFO("%s", sdp_string);
                     if (pc) {
                         juice_set_remote_description(pc->juice_agent, sdp_string);
                         // answer
                         // STATE_CHANGED(pc, PEER_CONNECTION_START);
+                    }
+                }
+                cJSON *payload = cJSON_GetObjectItem(cmd, "payload");
+                if (payload) {
+                    cJSON *video = cJSON_GetObjectItem(payload, "video");
+                    if (video) {
+                        peer_connection_set_video_payload(pc, video->valueint);
+                    }
+                    cJSON *audio = cJSON_GetObjectItem(payload, "audio");
+                    if (audio) {
+                        peer_connection_set_audio_payload(pc, audio->valueint);
                     }
                 }
             }

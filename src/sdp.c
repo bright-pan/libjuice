@@ -77,7 +77,7 @@ void sdp_append_pcma(sdp_t *sdp) {
     sdp_append(sdp, "a=sendrecv");
     sdp_append(sdp, "a=rtcp-mux");
     sdp_append(sdp, "a=rtpmap:8 PCMA/8000");
-    // sdp_append(sdp, "a=ptime:60");
+    sdp_append(sdp, "a=ptime:60");
     sdp_append(sdp, "a=ssrc:4 cname:webrtc-pcma");
 }
 

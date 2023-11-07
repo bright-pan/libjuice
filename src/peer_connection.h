@@ -202,7 +202,9 @@ int peer_connection_encrypt_send(peer_connection_t *pc, char *packet, int bytes)
 
 void peer_connection_set_cb_push_answer(peer_connection_t *pc, void (*on_push_answer)(char *sdp_content, void *userdata));
 void peer_connection_set_cb_push_candidate(peer_connection_t *pc, void (*on_push_candidate)(char *sdp_content, void *userdata));
-// void peer_connection_reset_video_fifo(peer_connection_t *pc);
+
+void peer_connection_set_video_payload(peer_connection_t *pc, int payload);
+void peer_connection_set_audio_payload(peer_connection_t *pc, int payload);
 #ifdef __cplusplus
 }
 #endif

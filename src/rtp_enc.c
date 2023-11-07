@@ -190,7 +190,7 @@ void *rtp_audio_dec_thread_entry(void *param) {
     audio_play_init(play, pcm);
 
     // audio demo init
-    audio_demo_init(AUDIO_DEMO_LENGTH, AUDIO_DEMO_CHANNEL_NUM, AUDIO_DEMO_BIT_DEPTH);
+    // audio_demo_init(AUDIO_DEMO_LENGTH, AUDIO_DEMO_CHANNEL_NUM, AUDIO_DEMO_BIT_DEPTH);
 
     while (1) {
         if (pc->rtp_audio_dec_loop_flag && pc->state == PEER_CONNECTION_COMPLETED) {
@@ -201,12 +201,14 @@ void *rtp_audio_dec_thread_entry(void *param) {
                     rtp_packet = (rtp_packet_t *)frame->packet;
                     if (rtp_packet->header.type == RTP_PAYLOAD_TYPE_PCMA) {
                         rtp_payload_len = frame->bytes - sizeof(rtp_packet_t);
+                        if (rtp_payload_len > PCM_PLAY_HW_PARAMS_PERIOD_SIZE) {
+                            rtp_payload_len = PCM_PLAY_HW_PARAMS_PERIOD_SIZE;
+                        }
                         // decode g711a to pcm16
                         alaw_to_pcm16(rtp_payload_len, (char *)rtp_packet->payload, pcm_play_enc_buffer);
                         audio_mono2stereo((short *)pcm_play_enc_buffer, rtp_payload_len, (short *)pcm_play_buffer);//left short + right short = len*2 short
                         aos_pcm_writei(play->pcm->handle, pcm_play_buffer, rtp_payload_len);
                         aos_pcm_write_wait_complete(play->pcm->handle, (rtp_payload_len * 1.0 / PCM_PLAY_HW_PARAMS_PERIOD_SIZE) * PCM_PLAY_PERIOD_TIMEOUT);
-                        usleep(RTP_AUDIO_DEC_INTERVAL*1000);
                         if(ret < 0){
                             JLOG_ERROR("write error");
                         } else {
@@ -234,9 +236,9 @@ void *rtp_audio_dec_thread_entry(void *param) {
                     }
                     // remove frame
                     rtp_list_delete(&pc->rtp_recv_cache_list, frame);
-                    usleep(1*1000);
+                    // usleep(1);
                 } else {
-                    usleep(1*1000);
+                    usleep(1);
                     break;
                 }
             }
