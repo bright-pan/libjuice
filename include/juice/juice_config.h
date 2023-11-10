@@ -24,12 +24,12 @@
 #define SERVER_BIND_ADDRESS "192.168.4.2"
 #define SERVER_BIND_PORT 3478
 
-#define STUN_SERVER_HOST "test.funlink.cloud"
-// #define STUN_SERVER_HOST "192.168.1.186"
+// #define STUN_SERVER_HOST "test.funlink.cloud"
+#define STUN_SERVER_HOST "192.168.1.186"
 #define STUN_SERVER_PORT 3478
 
-#define TURN_SERVER_HOST "test.funlink.cloud"
-// #define TURN_SERVER_HOST "192.168.1.186"
+// #define TURN_SERVER_HOST "test.funlink.cloud"
+#define TURN_SERVER_HOST "192.168.1.186"
 #define TURN_SERVER_PORT 3478
 #define TURN_SERVER_USERNAME "username1"
 #define TURN_SERVER_PASSWORD "password1"
